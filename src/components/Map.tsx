@@ -1,60 +1,304 @@
-import { useEffect, useState, useRef } from 'react';
-import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
+import type { LayerProps } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Navigation, AlertCircle, X, ShieldAlert, EyeOff, Sun, Moon } from 'lucide-react';
+import { 
+  Navigation, 
+  AlertCircle, 
+  X, 
+  ShieldAlert, 
+  EyeOff, 
+  Sun, 
+  Moon, 
+  Flame, 
+  Layers, 
+  TrendingUp, 
+  Compass, 
+  Globe, 
+  Mountain, 
+  LocateFixed, 
+  Check, 
+  Sparkles,
+  Zap,
+  Volume2,
+  ShieldCheck
+} from 'lucide-react';
+import { generateHeatmapGeoJson, getCyclingCorridors } from '../utils/heatmapData';
+import { audioEngine, ALARM_PRESETS } from '../utils/audio';
 
-const lightMapStyle = {
+export type MapLayerType = 'streets' | 'dark' | 'satellite' | 'relief';
+
+// Estilo Calles (Día) - OpenStreetMap
+const streetsMapStyle = {
   version: 8,
   sources: {
-    carto: {
+    osm: {
       type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
       tileSize: 256,
-      attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxzoom: 19
     }
   },
   layers: [
     {
-      id: 'carto',
+      id: 'osm-layer',
       type: 'raster',
-      source: 'carto'
+      source: 'osm'
     }
   ]
 };
 
+// Estilo Oscuro (Noche) - Carto Dark
 const darkMapStyle = {
   version: 8,
   sources: {
-    carto: {
+    carto_dark: {
       type: 'raster',
       tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
       tileSize: 256,
-      attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; CARTO &copy; OpenStreetMap',
       maxzoom: 19
     }
   },
   layers: [
     {
-      id: 'carto',
+      id: 'carto-dark-layer',
       type: 'raster',
-      source: 'carto'
+      source: 'carto_dark'
     }
   ]
 };
 
-export default function CyclingMap({ trackingEnabled = true }: { trackingEnabled?: boolean }) {
+// Estilo Satélite - Google Satellite tiles
+const satelliteMapStyle = {
+  version: 8,
+  sources: {
+    google_satellite: {
+      type: 'raster',
+      tiles: [
+        'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'https://mt2.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'https://mt3.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
+      ],
+      tileSize: 256,
+      attribution: '&copy; Google Maps Satélite',
+      maxzoom: 20
+    }
+  },
+  layers: [
+    {
+      id: 'google-satellite-layer',
+      type: 'raster',
+      source: 'google_satellite'
+    }
+  ]
+};
+
+// Estilo Relieve / Terreno - Google Terrain / Relief tiles
+const reliefMapStyle = {
+  version: 8,
+  sources: {
+    google_relief: {
+      type: 'raster',
+      tiles: [
+        'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+        'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+        'https://mt2.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+        'https://mt3.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'
+      ],
+      tileSize: 256,
+      attribution: '&copy; Google Maps Relieve',
+      maxzoom: 20
+    }
+  },
+  layers: [
+    {
+      id: 'google-relief-layer',
+      type: 'raster',
+      source: 'google_relief'
+    }
+  ]
+};
+
+const heatmapLayer: LayerProps = {
+  id: 'cycling-heatmap-layer',
+  type: 'heatmap',
+  paint: {
+    'heatmap-weight': [
+      'interpolate',
+      ['linear'],
+      ['get', 'intensity'],
+      0, 0,
+      1, 1
+    ],
+    'heatmap-intensity': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      9, 0.8,
+      13, 1.8,
+      16, 3.2
+    ],
+    'heatmap-color': [
+      'interpolate',
+      ['linear'],
+      ['heatmap-density'],
+      0, 'rgba(0, 0, 0, 0)',
+      0.15, 'rgba(34, 197, 94, 0.55)',
+      0.35, 'rgba(56, 189, 248, 0.75)',
+      0.6, 'rgba(250, 204, 21, 0.88)',
+      0.8, 'rgba(249, 115, 22, 0.96)',
+      1.0, 'rgba(239, 68, 68, 1)'
+    ],
+    'heatmap-radius': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      9, 12,
+      13, 24,
+      16, 42
+    ],
+    'heatmap-opacity': 0.88
+  }
+};
+
+const routeLineLayer: LayerProps = {
+  id: 'cycling-routes-layer',
+  type: 'line',
+  paint: {
+    'line-color': '#f97316',
+    'line-width': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      10, 2.5,
+      13, 4,
+      16, 5.5
+    ],
+    'line-opacity': 0.75,
+    'line-dasharray': [2, 1]
+  }
+};
+
+interface LayerOption {
+  id: MapLayerType;
+  title: string;
+  subtitle: string;
+  tag: string;
+  icon: typeof Sun;
+  accent: string;
+}
+
+const LAYER_OPTIONS: LayerOption[] = [
+  {
+    id: 'streets',
+    title: 'Calles (Día)',
+    subtitle: 'OpenStreetMap claro',
+    tag: 'Día',
+    icon: Sun,
+    accent: 'from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/40'
+  },
+  {
+    id: 'dark',
+    title: 'Oscuro (Noche)',
+    subtitle: 'Carto Dark de alto contraste',
+    tag: 'Noche',
+    icon: Moon,
+    accent: 'from-indigo-500/20 to-zinc-900 text-indigo-400 border-indigo-500/40'
+  },
+  {
+    id: 'satellite',
+    title: 'Satélite',
+    subtitle: 'Google Satélite en alta definición',
+    tag: 'Satélite',
+    icon: Globe,
+    accent: 'from-blue-500/20 to-cyan-500/10 text-blue-400 border-blue-500/40'
+  },
+  {
+    id: 'relief',
+    title: 'Relieve',
+    subtitle: 'Google Terreno con curvas y elevación',
+    tag: 'Relieve',
+    icon: Mountain,
+    accent: 'from-emerald-500/20 to-teal-500/10 text-emerald-400 border-emerald-500/40'
+  }
+];
+
+export default function CyclingMap({ 
+  trackingEnabled = true,
+  alarmSound = 'radar_ios',
+  onOpenPermissions
+}: { 
+  trackingEnabled?: boolean;
+  alarmSound?: string;
+  onOpenPermissions?: () => void;
+}) {
   const [viewState, setViewState] = useState({
     longitude: -66.3369,
     latitude: -33.2994,
     zoom: 13
   });
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [mapMode, setMapMode] = useState<'light' | 'dark'>('light');
+
+  // Capa activa (Modo día por defecto como exige la directriz)
+  const [activeLayer, setActiveLayer] = useState<MapLayerType>('streets');
+  const [isLayersMenuOpen, setIsLayersMenuOpen] = useState(false);
+
+  // Estado del mapa de calor y rutas en tiempo real
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showCorridors, setShowCorridors] = useState(true);
+  const [isHeatmapPanelOpen, setIsHeatmapPanelOpen] = useState(false);
+  const [pulseSeed, setPulseSeed] = useState(0);
+
+  // Mensaje flotante de feedback temporal
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [sosStatus, setSosStatus] = useState<'idle' | 'countdown' | 'active'>('idle');
   const [countdown, setCountdown] = useState(5);
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(message);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2400);
+  };
+
+  // Simulación en tiempo real de tráfico ciclista: pulso dinámico cada 3 segundos
+  useEffect(() => {
+    if (!showHeatmap) return;
+    const interval = setInterval(() => {
+      setPulseSeed(prev => prev + 1);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [showHeatmap]);
+
+  const centerLng = userLocation ? userLocation.lng : -66.3369;
+  const centerLat = userLocation ? userLocation.lat : -33.2994;
+
+  const corridors = useMemo(() => {
+    return getCyclingCorridors(centerLng, centerLat);
+  }, [centerLng, centerLat]);
+
+  const { heatmapData, routesData, totalCyclists } = useMemo(() => {
+    return generateHeatmapGeoJson(centerLng, centerLat, pulseSeed);
+  }, [centerLng, centerLat, pulseSeed]);
+
+  // Reproducir alarma con maximizador de volumen cuando SOS está activo
+  useEffect(() => {
+    if (sosStatus === 'active') {
+      audioEngine.play(alarmSound);
+    } else {
+      audioEngine.stop();
+    }
+    return () => {
+      audioEngine.stop();
+    };
+  }, [sosStatus, alarmSound]);
 
   useEffect(() => {
     if ('geolocation' in navigator) {
@@ -104,17 +348,91 @@ export default function CyclingMap({ trackingEnabled = true }: { trackingEnabled
   const handleCancelSos = () => {
     if (countdownInterval.current) clearInterval(countdownInterval.current);
     setSosStatus('idle');
+    audioEngine.stop();
   };
 
+  const handleCenterOnCorridor = (coords: [number, number][]) => {
+    if (coords && coords.length > 0) {
+      const mid = coords[Math.floor(coords.length / 2)];
+      setViewState(prev => ({
+        ...prev,
+        longitude: mid[0],
+        latitude: mid[1],
+        zoom: 14
+      }));
+    }
+  };
+
+  const handleRecenterUser = () => {
+    if (userLocation) {
+      setViewState(prev => ({
+        ...prev,
+        longitude: userLocation.lng,
+        latitude: userLocation.lat,
+        zoom: 15
+      }));
+      showToast('Ubicación centrada en GPS');
+    } else {
+      showToast('Obteniendo señal GPS...');
+    }
+  };
+
+  // Función mejorada del botón de mapa de calor
+  const handleToggleHeatmap = () => {
+    const nextState = !showHeatmap;
+    setShowHeatmap(nextState);
+    if (nextState) {
+      showToast('Mapa de calor activado: rutas comunitarias en vivo');
+    } else {
+      showToast('Mapa de calor desactivado');
+    }
+  };
+
+  const handleSelectLayer = (layerId: MapLayerType) => {
+    setActiveLayer(layerId);
+    setIsLayersMenuOpen(false);
+    const selected = LAYER_OPTIONS.find(l => l.id === layerId);
+    showToast(`Capa activada: ${selected ? selected.title : layerId}`);
+  };
+
+  // Determinar el estilo actual según la capa seleccionada
+  const currentMapStyle = useMemo(() => {
+    switch (activeLayer) {
+      case 'dark':
+        return darkMapStyle;
+      case 'satellite':
+        return satelliteMapStyle;
+      case 'relief':
+        return reliefMapStyle;
+      case 'streets':
+      default:
+        return streetsMapStyle;
+    }
+  }, [activeLayer]);
+
   return (
-    <div className="relative w-full h-full bg-gray-100">
+    <div className="relative w-full h-full bg-zinc-950 overflow-hidden">
       <Map
         {...viewState}
         onMove={evt => setViewState(evt.viewState)}
-        mapStyle={(mapMode === 'light' ? lightMapStyle : darkMapStyle) as any}
+        mapStyle={currentMapStyle as any}
         style={{ width: '100%', height: '100%' }}
       >
         <NavigationControl position="bottom-right" />
+
+        {/* Capa de Corredores de Rutas (LineString) */}
+        {showCorridors && showHeatmap && (
+          <Source id="routes-source" type="geojson" data={routesData}>
+            <Layer {...routeLineLayer} />
+          </Source>
+        )}
+
+        {/* Capa de Mapa de Calor en Tiempo Real (Heatmap) */}
+        {showHeatmap && (
+          <Source id="heatmap-source" type="geojson" data={heatmapData}>
+            <Layer {...heatmapLayer} />
+          </Source>
+        )}
         
         {userLocation && (
           <Marker longitude={userLocation.lng} latitude={userLocation.lat} anchor="center">
@@ -132,26 +450,326 @@ export default function CyclingMap({ trackingEnabled = true }: { trackingEnabled
         )}
       </Map>
 
-      {/* Map Mode Toggle */}
-      <button 
-        onClick={() => setMapMode(prev => prev === 'light' ? 'dark' : 'light')}
-        className="absolute top-20 right-4 bg-zinc-900/90 text-white p-3 rounded-full shadow-lg border border-zinc-700 z-10 hover:bg-zinc-800 transition-colors"
-      >
-        {mapMode === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-orange-500" />}
-      </button>
-
-      {/* SOS Active Banner */}
-      {sosStatus === 'active' && (
-        <div className="absolute top-0 left-0 w-full bg-red-600 text-white p-4 flex flex-col items-center justify-center shadow-lg z-20 animate-pulse">
-          <div className="flex items-center gap-2 font-bold text-lg">
-            <ShieldAlert className="w-6 h-6" />
-            <span>SOS ACTIVO</span>
-          </div>
-          <p className="text-sm font-medium opacity-90 text-center">
-            Transmitiendo tu ubicación a ciclistas cercanos y contactos de emergencia...
-          </p>
+      {/* Floating Notification Toast */}
+      {toastMessage && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-zinc-900/95 border border-orange-500/50 text-white px-4 py-2 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
+          <Sparkles className="w-4 h-4 text-orange-400 shrink-0" />
+          <span className="text-xs font-semibold">{toastMessage}</span>
         </div>
       )}
+
+      {/* Floating Controls Toolbar (Esquina Superior Derecha) */}
+      <div className="absolute top-20 right-4 flex flex-col gap-2.5 z-20">
+        {/* 1. Botón de Capas (Satelite, Relieve, Calles, Noche) */}
+        <div className="relative">
+          <button 
+            onClick={() => {
+              setIsLayersMenuOpen(prev => !prev);
+              if (isHeatmapPanelOpen) setIsHeatmapPanelOpen(false);
+            }}
+            className={`p-3 rounded-full shadow-lg border transition-all flex items-center justify-center w-12 h-12 ${
+              isLayersMenuOpen || activeLayer === 'satellite' || activeLayer === 'relief'
+                ? 'bg-zinc-800 text-orange-400 border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.35)]' 
+                : 'bg-zinc-900/90 text-zinc-200 border-zinc-700 hover:bg-zinc-800 hover:text-white'
+            }`}
+            title="Capas del mapa (Satélite, Relieve, Calles, Oscuro)"
+            aria-label="Seleccionar capa del mapa"
+          >
+            <Layers className="w-5 h-5" />
+          </button>
+
+          {/* Menú Flotante de Selección de Capas */}
+          {isLayersMenuOpen && (
+            <div className="absolute right-0 top-14 w-72 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-2xl p-3 shadow-2xl z-30 animate-in fade-in slide-in-from-top-3 duration-200">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800/80">
+                <div className="flex items-center gap-1.5 text-zinc-200 font-bold text-xs uppercase tracking-wider">
+                  <Layers className="w-4 h-4 text-orange-500" />
+                  <span>Capas de Mapa</span>
+                </div>
+                <button 
+                  onClick={() => setIsLayersMenuOpen(false)}
+                  className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                {LAYER_OPTIONS.map((layer) => {
+                  const Icon = layer.icon;
+                  const isSelected = activeLayer === layer.id;
+                  return (
+                    <button
+                      key={layer.id}
+                      onClick={() => handleSelectLayer(layer.id)}
+                      className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
+                        isSelected 
+                          ? `bg-gradient-to-r ${layer.accent} border-orange-500/80 shadow-md` 
+                          : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-300 hover:bg-zinc-800/80 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-orange-500 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-white">{layer.title}</span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                              isSelected ? 'bg-orange-500/30 text-orange-300' : 'bg-zinc-800 text-zinc-400'
+                            }`}>
+                              {layer.tag}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-400 leading-tight mt-0.5">{layer.subtitle}</p>
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center text-white shrink-0">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2.5 pt-2 border-t border-zinc-800/80 text-[10px] text-zinc-400 flex items-center justify-between">
+                <span>Teselas de alta precisión</span>
+                <span className="text-orange-400 font-medium">Google & OSM</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Botón Rediseñado de Mapa de Calor (Toggle directo con estado visual claro) */}
+        <div className="relative group">
+          <button 
+            onClick={handleToggleHeatmap}
+            className={`p-3 rounded-full shadow-lg border transition-all flex items-center justify-center w-12 h-12 relative ${
+              showHeatmap 
+                ? 'bg-gradient-to-br from-orange-500 to-amber-600 text-white border-orange-400 shadow-[0_0_18px_rgba(249,115,22,0.6)] animate-pulse' 
+                : 'bg-zinc-900/90 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200'
+            }`}
+            title={showHeatmap ? 'Desactivar mapa de calor' : 'Activar mapa de calor comunitario'}
+            aria-label="Alternar mapa de calor"
+          >
+            <Flame className={`w-5 h-5 ${showHeatmap ? 'fill-white text-white drop-shadow' : 'text-zinc-400'}`} />
+            
+            {/* Indicador de estado ON/OFF en miniatura */}
+            <span className={`absolute -top-1 -right-1 text-[9px] font-black px-1.5 py-0.2 rounded-full border shadow-sm ${
+              showHeatmap 
+                ? 'bg-green-500 text-zinc-950 border-green-300' 
+                : 'bg-zinc-700 text-zinc-300 border-zinc-600'
+            }`}>
+              {showHeatmap ? 'ON' : 'OFF'}
+            </span>
+          </button>
+        </div>
+
+        {/* 3. Botón de Corredores y Telemetría de Rutas */}
+        <button 
+          onClick={() => {
+            setIsHeatmapPanelOpen(prev => !prev);
+            if (isLayersMenuOpen) setIsLayersMenuOpen(false);
+          }}
+          className={`p-3 rounded-full shadow-lg border transition-all flex items-center justify-center w-12 h-12 ${
+            isHeatmapPanelOpen 
+              ? 'bg-zinc-800 text-orange-400 border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.35)]' 
+              : 'bg-zinc-900/90 text-zinc-300 border-zinc-700 hover:bg-zinc-800 hover:text-white'
+          }`}
+          title="Ver rutas populares y estadísticas"
+          aria-label="Ver rutas y estadísticas"
+        >
+          <TrendingUp className="w-5 h-5" />
+        </button>
+
+        {/* 4. Botón de Recentrado GPS */}
+        <button 
+          onClick={handleRecenterUser}
+          className="bg-zinc-900/90 text-zinc-200 hover:text-white p-3 rounded-full shadow-lg border border-zinc-700 hover:bg-zinc-800 transition-all flex items-center justify-center w-12 h-12"
+          title="Centrar mapa en mi ubicación"
+          aria-label="Centrar en mi ubicación"
+        >
+          <LocateFixed className="w-5 h-5" />
+        </button>
+
+        {/* 5. Botón de Permisos e Instalación SOS */}
+        {onOpenPermissions && (
+          <button 
+            onClick={onOpenPermissions}
+            className="bg-zinc-900/90 text-orange-400 hover:text-white p-3 rounded-full shadow-lg border border-zinc-700 hover:border-orange-500/50 hover:bg-zinc-800 transition-all flex items-center justify-center w-12 h-12"
+            title="Instalación y permisos de emergencia"
+            aria-label="Permisos e Instalación"
+          >
+            <ShieldCheck className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Live Community Heatmap Status Pill (Esquina Superior Izquierda) */}
+      {showHeatmap && !isHeatmapPanelOpen && (
+        <button 
+          onClick={() => setIsHeatmapPanelOpen(true)}
+          className="absolute top-20 left-4 bg-zinc-900/90 backdrop-blur-md border border-zinc-700/80 text-white px-3.5 py-2 rounded-full shadow-lg z-10 flex items-center gap-2 hover:bg-zinc-800 hover:border-orange-500/50 transition-all"
+        >
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500"></span>
+          </span>
+          <span className="text-xs font-semibold text-zinc-200">
+            {totalCyclists} ciclistas en ruta
+          </span>
+          <span className="text-[10px] font-bold text-orange-400 bg-orange-500/20 px-1.5 py-0.5 rounded-full">
+            EN VIVO
+          </span>
+        </button>
+      )}
+
+      {/* Heatmap Drawer / Detailed Information Panel */}
+      {isHeatmapPanelOpen && (
+        <div className="absolute top-20 left-4 right-18 sm:left-auto sm:right-20 sm:w-84 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 text-white rounded-2xl p-4 shadow-2xl z-20 animate-in fade-in slide-in-from-top-4 duration-200 max-h-[75vh] overflow-y-auto">
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-orange-500/20 text-orange-500 rounded-lg">
+                <Flame className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-white">Rutas Frecuentadas</h4>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                  <span className="text-[11px] text-zinc-400 font-medium">Comunidad en tiempo real</span>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsHeatmapPanelOpen(false)}
+              className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 gap-2 my-3">
+            <div className="bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800/80">
+              <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider block">Ciclistas Activos</span>
+              <span className="text-xl font-black text-orange-400">{totalCyclists}</span>
+            </div>
+            <div className="bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800/80">
+              <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider block">Corredores</span>
+              <span className="text-xl font-black text-zinc-100">{corridors.length} zonas</span>
+            </div>
+          </div>
+
+          {/* Heatmap Legend */}
+          <div className="mb-3 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+            <span className="text-[11px] font-semibold text-zinc-300 block mb-1.5">Intensidad de Tránsito</span>
+            <div className="h-2.5 w-full rounded-full bg-gradient-to-r from-emerald-500 via-sky-400 via-yellow-400 via-orange-500 to-red-600 mb-1 shadow-inner"></div>
+            <div className="flex justify-between text-[10px] text-zinc-400 font-medium">
+              <span>Tranquilo</span>
+              <span>Moderado</span>
+              <span className="text-red-400 font-semibold">Muy Frecuentado</span>
+            </div>
+          </div>
+
+          {/* Toggles */}
+          <div className="space-y-2 mb-3">
+            <label className="flex items-center justify-between text-xs text-zinc-300 bg-zinc-900/50 p-2.5 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
+              <span className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-400" />
+                Mapa de calor térmico
+              </span>
+              <input 
+                type="checkbox" 
+                checked={showHeatmap} 
+                onChange={(e) => {
+                  setShowHeatmap(e.target.checked);
+                  showToast(e.target.checked ? 'Mapa de calor activado' : 'Mapa de calor desactivado');
+                }}
+                className="w-4 h-4 accent-orange-500 rounded cursor-pointer"
+              />
+            </label>
+            <label className="flex items-center justify-between text-xs text-zinc-300 bg-zinc-900/50 p-2.5 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
+              <span className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-orange-400" />
+                Trazas de ciclovías
+              </span>
+              <input 
+                type="checkbox" 
+                checked={showCorridors} 
+                onChange={(e) => setShowCorridors(e.target.checked)}
+                className="w-4 h-4 accent-orange-500 rounded cursor-pointer"
+              />
+            </label>
+          </div>
+
+          {/* Popular Routes List */}
+          <div>
+            <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-2">
+              Top Corredores de Hoy
+            </span>
+            <div className="space-y-1.5">
+              {corridors.slice(0, 3).map((corridor) => (
+                <div 
+                  key={corridor.id}
+                  className="bg-zinc-900/70 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 flex items-center justify-between gap-2 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-zinc-200 truncate">{corridor.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                        corridor.trafficLevel === 'Muy Alto' 
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                          : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                      }`}>
+                        {corridor.trafficLevel}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {corridor.activeCyclists} ciclistas
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleCenterOnCorridor(corridor.coordinates)}
+                    className="p-1.5 text-orange-400 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors flex-shrink-0"
+                    title="Ver en el mapa"
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    <span className="text-[10px]">Ver</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SOS Active Banner */}
+      {sosStatus === 'active' && (() => {
+        const activeAlarmPreset = ALARM_PRESETS.find(p => p.id === alarmSound) || ALARM_PRESETS[0];
+        return (
+          <div className="absolute top-0 left-0 w-full bg-red-600 text-white p-4 flex flex-col items-center justify-center shadow-2xl z-30 animate-pulse">
+            <div className="flex items-center gap-2 font-black text-lg tracking-wide">
+              <ShieldAlert className="w-6 h-6 animate-bounce" />
+              <span>¡ALARMA SOS EMITIENDO A VOLUMEN MÁXIMO!</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+              <span className="text-xs font-bold bg-black/40 px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-yellow-300" />
+                Tono: {activeAlarmPreset.name} ({activeAlarmPreset.brand})
+              </span>
+              <span className="text-xs font-bold bg-black/40 text-green-300 px-3 py-1 rounded-full border border-green-400/40 flex items-center gap-1">
+                <Zap className="w-3 h-3 text-green-400" /> Auto-Boost Acústico +240%
+              </span>
+            </div>
+            <p className="text-xs font-medium opacity-90 text-center mt-1.5 max-w-md">
+              Transmitiendo tu ubicación satelital a ciclistas de la comunidad y contactos de emergencia con pantalla activa.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Tracking Disabled Banner */}
       {!trackingEnabled && sosStatus !== 'active' && (
@@ -161,7 +779,7 @@ export default function CyclingMap({ trackingEnabled = true }: { trackingEnabled
         </div>
       )}
 
-      {/* Action Overlays */}
+      {/* Action Overlays - Botón SOS Flotante */}
       <div className="absolute bottom-8 left-4 flex flex-col gap-4 z-20">
         {sosStatus === 'active' ? (
           <button
@@ -175,6 +793,8 @@ export default function CyclingMap({ trackingEnabled = true }: { trackingEnabled
           <button
             className={`${sosStatus === 'countdown' ? 'hidden' : 'flex'} bg-red-600 hover:bg-red-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all hover:scale-105 items-center justify-center border border-red-500`}
             onClick={handleSosClick}
+            title="Activar SOS de Emergencia"
+            aria-label="Activar SOS"
           >
             <AlertCircle className="w-8 h-8" />
           </button>
@@ -182,28 +802,41 @@ export default function CyclingMap({ trackingEnabled = true }: { trackingEnabled
       </div>
 
       {/* SOS Countdown Overlay */}
-      {sosStatus === 'countdown' && (
-        <div className="absolute inset-0 bg-red-950/95 backdrop-blur-md z-30 flex flex-col items-center justify-center text-white p-6">
-          <ShieldAlert className="w-20 h-20 mb-6 text-red-500 animate-pulse" />
-          <h2 className="text-3xl font-black mb-2 text-center text-red-500">ALERTA DE EMERGENCIA</h2>
-          <p className="text-xl mb-12 text-center text-red-300">Activando protocolo SOS en...</p>
-          
-          <div className="text-9xl font-black mb-12 tabular-nums text-red-500 drop-shadow-[0_0_30px_rgba(239,68,68,0.8)]">
-            {countdown}
-          </div>
+      {sosStatus === 'countdown' && (() => {
+        const activeAlarmPreset = ALARM_PRESETS.find(p => p.id === alarmSound) || ALARM_PRESETS[0];
+        return (
+          <div className="absolute inset-0 bg-red-950/95 backdrop-blur-md z-30 flex flex-col items-center justify-center text-white p-6">
+            <ShieldAlert className="w-20 h-20 mb-4 text-red-500 animate-pulse" />
+            <h2 className="text-3xl font-black mb-1 text-center text-red-500">ALERTA DE EMERGENCIA</h2>
+            <p className="text-lg mb-4 text-center text-red-300">Activando protocolo SOS y alarma sonora en...</p>
+            
+            <div className="text-9xl font-black mb-6 tabular-nums text-red-500 drop-shadow-[0_0_30px_rgba(239,68,68,0.8)]">
+              {countdown}
+            </div>
 
-          <button
-            onClick={handleCancelSos}
-            className="bg-white text-red-600 px-10 py-5 rounded-full font-bold text-xl shadow-2xl flex items-center gap-3 hover:scale-105 transition-transform"
-          >
-            <X className="w-8 h-8" />
-            CANCELAR
-          </button>
-          <p className="mt-6 text-sm text-red-300 text-center max-w-xs">
-            Si no cancelas, se notificará a los ciclistas cercanos y contactos predefinidos con tu ubicación exacta.
-          </p>
-        </div>
-      )}
+            <div className="mb-8 flex flex-col items-center gap-1.5 text-center">
+              <div className="flex items-center gap-2 text-xs font-semibold text-white bg-black/40 border border-red-500/40 px-3.5 py-1.5 rounded-full">
+                <Volume2 className="w-4 h-4 text-orange-400" />
+                <span>Tono: <strong>{activeAlarmPreset.name}</strong> ({activeAlarmPreset.brand})</span>
+              </div>
+              <span className="text-[11px] text-red-300/90">
+                🔊 El volumen acústico aumentará automáticamente al nivel más alto
+              </span>
+            </div>
+
+            <button
+              onClick={handleCancelSos}
+              className="bg-white text-red-600 px-10 py-5 rounded-full font-bold text-xl shadow-2xl flex items-center gap-3 hover:scale-105 transition-transform"
+            >
+              <X className="w-8 h-8" />
+              CANCELAR
+            </button>
+            <p className="mt-6 text-sm text-red-300 text-center max-w-xs">
+              Si no cancelas, sonará la alarma a volumen forzado y se notificará a los ciclistas cercanos con tu posición satelital.
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }

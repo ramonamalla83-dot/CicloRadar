@@ -1,17 +1,19 @@
-import { useState } from 'react';
-import { Camera, Bike, Save, EyeOff, Eye, AlertTriangle, Bell, Play, Square } from 'lucide-react';
-import { audioEngine } from '../utils/audio';
+import React, { useState } from 'react';
+import { Camera, Bike, Save, Eye, AlertTriangle, Bell, Play, Square, ShieldCheck } from 'lucide-react';
+import { audioEngine, ALARM_PRESETS } from '../utils/audio';
 
 export default function ProfileSettings({ 
   trackingEnabled = true, 
   setTrackingEnabled,
-  alarmSound = 'sirena',
-  setAlarmSound 
+  alarmSound = 'radar_ios',
+  setAlarmSound,
+  onOpenPermissions
 }: { 
-  trackingEnabled?: boolean,
-  setTrackingEnabled?: (enabled: boolean) => void,
-  alarmSound?: string,
-  setAlarmSound?: (sound: string) => void
+  trackingEnabled?: boolean;
+  setTrackingEnabled?: (enabled: boolean) => void;
+  alarmSound?: string;
+  setAlarmSound?: (sound: string) => void;
+  onOpenPermissions?: () => void;
 }) {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [bikeImage, setBikeImage] = useState<string | null>(null);
@@ -107,37 +109,97 @@ export default function ProfileSettings({
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${trackingEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
-
-            <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-              <div className="flex items-center justify-between mb-3">
+            {/* Tono de Alerta SOS y Volumen Boost */}
+            <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 space-y-3">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-bold text-white text-sm flex items-center gap-1"><Bell className="w-4 h-4 text-orange-500"/> Tono de Alerta SOS</p>
-                  <p className="text-xs text-zinc-400">Sonido al recibir un SOS cercano</p>
+                  <p className="font-bold text-white text-sm flex items-center gap-1.5">
+                    <Bell className="w-4 h-4 text-orange-500"/> Sonido de Alarma SOS del Sistema
+                  </p>
+                  <p className="text-xs text-zinc-400">Tono emitido al activar o recibir un SOS</p>
                 </div>
+                <span className="text-[10px] font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">
+                  Auto-Boost 🔊
+                </span>
               </div>
-              <div className="flex gap-2">
-                <select 
-                  value={alarmSound}
-                  onChange={e => {
-                    setAlarmSound?.(e.target.value);
-                    if (isPlayingTest) {
-                      audioEngine.play(e.target.value);
-                    }
-                  }}
-                  className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 text-white rounded-lg outline-none focus:border-orange-500 transition-colors text-sm"
-                >
-                  <option value="sirena">Sirena (Rápida)</option>
-                  <option value="alarma">Alarma (Constante)</option>
-                  <option value="pitido">Pitido (Intermitente)</option>
-                </select>
+
+              {/* Selector de tonos de sistema */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {ALARM_PRESETS.map((preset) => {
+                  const isSelected = alarmSound === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setAlarmSound?.(preset.id);
+                        audioEngine.play(preset.id);
+                        setIsPlayingTest(true);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-orange-500/15 border-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.25)]'
+                          : 'bg-zinc-900/80 border-zinc-700/70 hover:bg-zinc-800 text-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1 mb-1">
+                        <span className="text-xs font-bold text-white leading-tight">{preset.name}</span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${preset.badgeColor}`}>
+                          {preset.brand.split(' ')[0]}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 line-clamp-2 leading-tight">
+                        {preset.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Botón de control de prueba y auto-aumento */}
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-700/60">
+                <span className="text-[11px] text-zinc-400">
+                  {isPlayingTest ? '🔊 Sonando a volumen máximo...' : 'Prueba el tono con auto-amplificación:'}
+                </span>
                 <button 
+                  type="button"
                   onClick={toggleSoundTest}
-                  className={`px-4 py-2 rounded-lg flex items-center justify-center transition-colors border ${isPlayingTest ? 'bg-red-500/20 text-red-500 border-red-500/30' : 'bg-orange-500/10 text-orange-500 border-orange-500/20 hover:bg-orange-500/20'}`}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border ${
+                    isPlayingTest 
+                      ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse' 
+                      : 'bg-orange-500 text-zinc-950 border-orange-500 hover:bg-orange-400'
+                  }`}
                 >
-                  {isPlayingTest ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  {isPlayingTest ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                  <span>{isPlayingTest ? 'Detener Alarma' : 'Probar Alarma'}</span>
                 </button>
               </div>
+
+              {/* Info de Aumento de Volumen */}
+              <div className="p-2.5 bg-zinc-900/90 border border-zinc-700/60 rounded-lg text-[11px] text-zinc-400 flex items-start gap-2">
+                <span className="text-orange-400 font-bold shrink-0">ℹ️</span>
+                <span>
+                  <strong>Aumento Automático:</strong> Si el volumen del celular está bajo, el motor de audio aplica compresión dinámica y sobreganancia para maximizar la resonancia de los parlantes del móvil.
+                </span>
+              </div>
             </div>
+
+            {/* Acceso a Permisos e Instalación */}
+            {onOpenPermissions && (
+              <div className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-white text-sm">Instalación y Permisos</p>
+                  <p className="text-xs text-zinc-400">GPS, Notificaciones, Wake Lock y PWA</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenPermissions}
+                  className="px-3.5 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 text-xs font-bold rounded-lg transition-colors"
+                >
+                  Configurar
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

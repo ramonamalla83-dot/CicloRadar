@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Phone, ArrowRight, ShieldCheck, Bike } from 'lucide-react';
 
 export default function Auth({ onLogin }: { onLogin: (name: string) => void }) {

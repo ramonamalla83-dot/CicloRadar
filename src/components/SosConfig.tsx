@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, Phone, User as UserIcon } from 'lucide-react';
 
 export default function SosConfig() {

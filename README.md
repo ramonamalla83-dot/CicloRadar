@@ -53,7 +53,7 @@
 ### 👥 Comunidad y Seguridad
 - **Lista de Ciclistas Cercanos**: Estado de actividad, distancias calculadas y disponibilidad para rodar.
 - **Simulador de Emergencias**: Herramienta de pruebas integrada para verificar cómo reacciona la aplicación ante un aviso de socorro entrante.
-- **Configuración de Contactos de Emergencia**: Gestión de números de teléfono para alertas por SMS o WhatsApp.
+- **Configuración de Contactos de Emergencia**: Añade contactos desde la agenda en navegadores móviles compatibles o ingrésalos manualmente.
 
 ### ⚙️ Personalización y Ficha Técnica
 - **Selector de Tono de Alarma del Sistema**: Previsualización interactiva con botón de prueba en Perfil para escuchar el auto-boost antes de salir a la ruta.

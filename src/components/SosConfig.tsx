@@ -1,5 +1,21 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Phone, User as UserIcon } from 'lucide-react';
+import { Plus, Trash2, Phone, User as UserIcon, Contact } from 'lucide-react';
+
+type ContactPickerEntry = {
+  name?: string[];
+  tel?: string[];
+};
+
+type ContactPicker = {
+  select: (
+    properties: ('name' | 'tel')[],
+    options?: { multiple?: boolean },
+  ) => Promise<ContactPickerEntry[]>;
+};
+
+type NavigatorWithContactPicker = Navigator & {
+  contacts?: ContactPicker;
+};
 
 export default function SosConfig() {
   const [contacts, setContacts] = useState([
@@ -7,13 +23,50 @@ export default function SosConfig() {
   ]);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [contactPickerError, setContactPickerError] = useState('');
+  const contactPicker = typeof navigator !== 'undefined'
+    ? (navigator as NavigatorWithContactPicker).contacts
+    : undefined;
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (newName && newPhone) {
-      setContacts([...contacts, { id: Date.now(), name: newName, phone: newPhone }]);
+      setContacts(current => [...current, { id: Date.now(), name: newName, phone: newPhone }]);
       setNewName('');
       setNewPhone('');
+    }
+  };
+
+  const handlePickContact = async () => {
+    if (!contactPicker) {
+      setContactPickerError('La selección de contactos no está disponible en este navegador.');
+      return;
+    }
+
+    setContactPickerError('');
+
+    try {
+      const [selectedContact] = await contactPicker.select(['name', 'tel'], { multiple: false });
+      if (!selectedContact) return;
+
+      const phone = selectedContact.tel?.find(value => value.trim());
+      if (!phone) {
+        setNewName(selectedContact.name?.[0] ?? '');
+        setContactPickerError('El contacto seleccionado no tiene teléfono. Complétalo manualmente.');
+        return;
+      }
+
+      setContacts(current => [
+        ...current,
+        {
+          id: Date.now(),
+          name: selectedContact.name?.[0]?.trim() || phone,
+          phone,
+        },
+      ]);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setContactPickerError('No se pudo leer el contacto. Prueba nuevamente o ingrésalo manualmente.');
     }
   };
 
@@ -28,6 +81,23 @@ export default function SosConfig() {
       
       <form onSubmit={handleAdd} className="bg-zinc-900 p-4 rounded-2xl shadow-sm border border-zinc-800 mb-6 space-y-4">
         <h3 className="font-semibold text-white">Añadir Contacto</h3>
+        {contactPicker && (
+          <button
+            type="button"
+            onClick={handlePickContact}
+            className="w-full bg-zinc-800 text-white font-semibold py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-700 transition-colors border border-zinc-700"
+          >
+            <Contact className="w-5 h-5" /> Elegir del celular
+          </button>
+        )}
+        {contactPickerError && (
+          <p role="alert" className="text-sm text-amber-400">{contactPickerError}</p>
+        )}
+        <p className="text-xs text-zinc-500">
+          {contactPicker
+            ? 'O ingrésalo manualmente:'
+            : 'Para elegir desde la agenda necesitas un navegador móvil compatible. También puedes ingresarlo manualmente:'}
+        </p>
         <div className="space-y-3">
           <div className="relative">
             <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />

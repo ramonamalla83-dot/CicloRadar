@@ -117,7 +117,17 @@ Si surge algún error de compilación o tipado, arréglalo inmediatamente antes 
 
 ---
 
-## 6. Ideas para Futuras Extensiones (Backlog Técnico)
+## 6. Publicación de Cambios
+
+Al terminar cada tarea que modifique el proyecto:
+1. Revisa el estado de Git y prepara un commit que incluya únicamente los archivos modificados para esa tarea; no incorpores cambios ajenos del usuario.
+2. Ejecuta las verificaciones aplicables y crea un commit descriptivo.
+3. Publica el commit en `https://github.com/ramonamalla83-dot/CicloRadar.git` mediante un push normal a la rama correspondiente.
+4. Nunca fuerces el push ni reescribas el historial. Si no hay acceso al repositorio, la rama está protegida o Git no está disponible, informa claramente el bloqueo y no afirmes que se publicó.
+
+---
+
+## 7. Ideas para Futuras Extensiones (Backlog Técnico)
 - **Persistencia Local**: Guardar contactos SOS y configuración de audio en `localStorage` o base de datos.
 - **Rutas GPX / KML**: Soporte para cargar y visualizar rutas ciclistas en formato GPX sobre la capa de MapLibre.
 - **Geocoding Inverso**: Mostrar nombre de calle o intersección actual en la tarjeta SOS.

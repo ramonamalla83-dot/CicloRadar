@@ -1,0 +1,45 @@
+name: cicloradar
+description: "CicloRadar - Sistema de seguridad comunitaria, radar y alertas SOS para ciclistas en Flutter."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Cartografía interactiva y coordenadas
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+  # Geolocalización en tiempo real
+  geolocator: ^13.0.2
+
+  # Alerta sonora y reproducción de tonos
+  audioplayers: ^6.1.1
+
+  # Vibración háptica en emergencias
+  vibration: ^2.0.1
+
+  # Mantener pantalla encendida en soporte de manillar
+  wakelock_plus: ^1.2.8
+
+  # Manejo de estado reactivo
+  provider: ^6.1.2
+
+  # Persistencia de preferencias
+  shared_preferences: ^2.3.5
+
+  # Iconografía y diseño
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

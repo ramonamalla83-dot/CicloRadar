@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Android Emulator",
+      "type": "shell",
+      "command": "C:\\Users\\Tatu\\Documents\\Proyectos\\flutter\\bin\\flutter.bat run -d emulator",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "inAgents": true
+    }
+  ]
+}

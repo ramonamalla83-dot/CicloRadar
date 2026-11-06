@@ -23,6 +23,7 @@ La app usa Flutter/Dart, `provider`, `flutter_map`, `geolocator`, `audioplayers`
 - No presentar datos simulados como ciclistas conectados ni el SOS local como una alerta transmitida. La app aún no tiene backend ni envío de SMS.
 - El registro de tres pasos es solo local: no afirmar que se envió o validó un código SMS. La finalización del registro guarda el perfil en el dispositivo; la app abre Inicio al finalizar.
 - Las métricas, recorridos y rutas que muestra el dashboard de Inicio son datos de ejemplo mientras no exista registro de trayectos.
+- FCM requiere credenciales públicas de plataforma y Cloud Functions autenticadas; no afirmar que los pushes están activos sin desplegar el backend. Solo guardar presencia GPS con consentimiento SOS y mientras la app está activa; eliminarla al salir y aplicar TTL en el servidor.
 - Tipar código Dart y manejar errores de permisos y plugins de forma explícita.
 
 ## Validación

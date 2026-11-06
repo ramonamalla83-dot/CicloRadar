@@ -9,7 +9,9 @@ class SosDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
 
-    if (!appState.isCountingDown && !appState.isEmergencyActive) {
+    if (!appState.isCountingDown &&
+        !appState.isEmergencyActive &&
+        appState.incomingEmergency == null) {
       return const SizedBox.shrink();
     }
 
@@ -17,9 +19,11 @@ class SosDialog extends StatelessWidget {
       color: Colors.black.withValues(alpha: 0.85),
       padding: const EdgeInsets.all(24.0),
       child: Center(
-        child: appState.isCountingDown
-            ? _buildCountdownView(context, appState)
-            : _buildActiveEmergencyView(context, appState),
+        child: appState.incomingEmergency != null && !appState.isEmergencyActive
+            ? _buildIncomingSosView(context, appState)
+            : appState.isCountingDown
+                ? _buildCountdownView(context, appState)
+                : _buildActiveEmergencyView(context, appState),
       ),
     );
   }
@@ -91,7 +95,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           const Text(
-            'Activando alarma local de prueba',
+            'Confirmando alerta SOS',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 18,
@@ -101,7 +105,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Se reproducirá una alarma local en este dispositivo. Esta versión no envía alertas ni comparte tu ubicación.',
+            'Al terminar la cuenta regresiva se activará la alarma local. El envío remoto requiere Firebase configurado.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -182,7 +186,8 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'El sonido se reproduce en este dispositivo. No se enviaron notificaciones ni datos a la comunidad.',
+            appState.sosPushStatus ??
+                'La alarma local está activa; preparando la notificación SOS.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -212,6 +217,71 @@ class SosDialog extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncomingSosView(BuildContext context, AppState appState) {
+    final cyclist = appState.incomingEmergency!;
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: const Color(0xFF18181B),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.red, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withValues(alpha: 0.35),
+            blurRadius: 36,
+            spreadRadius: 6,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.crisis_alert, size: 58, color: Colors.redAccent),
+          const SizedBox(height: 18),
+          const Text(
+            'SOS DE CICLISTA CERCANO',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.redAccent,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            cyclist.name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            appState.hasVerifiedUserLocation
+                ? '${cyclist.distanceKm.toStringAsFixed(1)} km de distancia'
+                : 'Activa el GPS para ver la distancia',
+            style: TextStyle(color: Colors.grey.shade300),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton.icon(
+              onPressed: appState.dismissIncomingSos,
+              icon: const Icon(Icons.volume_off),
+              label: const Text('CERRAR AVISO'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
               ),
             ),
           ),

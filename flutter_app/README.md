@@ -33,5 +33,7 @@ Android: `flutter build apk --release`. iOS: `flutter build ipa --release` desde
 
 La app inicia con un registro local de tres pasos (teléfono, código de demostración y perfil ciclista) y continúa a Inicio, con un dashboard ilustrativo, y al mapa. Incluye mapas raster, GPS con ubicación de respaldo, datos de comunidad de ejemplo, privacidad local, perfil y contactos SOS guardados en el dispositivo. Las alarmas se sintetizan localmente; vibración y bloqueo de pantalla dependen de la plataforma.
 
-**Prototipo solamente:** el código de registro no se envía por SMS ni se valida con un servicio; solo sirve para avanzar el flujo de demostración. La comunidad no se conecta a otros usuarios y las alertas SOS no se envían a servidores ni a contactos. No usar como sistema de emergencia real. El nivel de volumen también depende del dispositivo.
+**Prototipo solamente:** el código de registro no se envía por SMS ni se valida con un servicio; solo sirve para avanzar el flujo de demostración. La comunidad no se conecta a otros usuarios. El cliente FCM de alertas SOS requiere un proyecto Firebase y las Cloud Functions documentadas antes de poder enviar notificaciones remotas. No usar como sistema de emergencia real. El nivel de volumen también depende del dispositivo.
 Las métricas, recorridos recientes y rutas de Inicio son datos de ejemplo; la app todavía no registra trayectos ni permite guardar rutas reales.
+
+Consulta [FIREBASE_PUSH_SETUP.md](./FIREBASE_PUSH_SETUP.md) para configuración, privacidad y contrato del backend requerido para recibir alertas SOS en segundo plano.

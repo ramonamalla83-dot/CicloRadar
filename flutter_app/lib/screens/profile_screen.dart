@@ -196,6 +196,72 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
+          Material(
+            color: const Color(0xFF18181B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Colors.white10),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: appState.sosPushConfigured &&
+                        appState.sosAlertNotificationsEnabled,
+                    onChanged: appState.sosPushConfigured
+                        ? (enabled) async {
+                            try {
+                              await appState
+                                  .setSosAlertNotificationsEnabled(enabled);
+                            } catch (error) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(error.toString())),
+                              );
+                            }
+                          }
+                        : null,
+                    activeThumbColor: const Color(0xFFF97316),
+                    secondary: const Icon(
+                      Icons.notifications_active_outlined,
+                      color: Color(0xFFF97316),
+                    ),
+                    title: const Text(
+                      'Notificaciones SOS en este dispositivo y cercanas',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      appState.sosPushConfigured
+                          ? 'Activa las notificaciones y comparte GPS solo mientras usas la app para avisos a 10 km.'
+                          : 'Pendiente de configurar Firebase y el servicio de notificaciones.',
+                      style:
+                          TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                    ),
+                  ),
+                  if (appState.sosPushStatus != null) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        appState.sosPushStatus!,
+                        style: TextStyle(
+                          color: appState.sosPushConfigured
+                              ? Colors.grey.shade400
+                              : Colors.amber.shade300,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
           // SELECTOR DE ALARMA DEL SISTEMA (Apple Radar, Samsung, Google Pixel)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

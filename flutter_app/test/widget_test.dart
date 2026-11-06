@@ -1,5 +1,6 @@
 import 'package:cicloradar/providers/app_state.dart';
 import 'package:cicloradar/main.dart';
+import 'package:cicloradar/services/firebase_config.dart';
 import 'package:cicloradar/screens/home_screen.dart';
 import 'package:cicloradar/screens/registration_screen.dart';
 import 'package:cicloradar/screens/sos_contacts_screen.dart';
@@ -9,6 +10,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('push integration is not configured without Firebase options', () {
+    expect(FirebaseConfig.isConfigured, isFalse);
+  });
+
   testWidgets('a new profile opens on registration instead of the map',
       (tester) async {
     SharedPreferences.setMockInitialValues({});

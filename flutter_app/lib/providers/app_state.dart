@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,8 +10,9 @@ import '../models/map_layer.dart';
 import '../models/sos_contact.dart';
 import '../services/audio_alarm_service.dart';
 import '../services/location_service.dart';
+import '../services/sos_push_service.dart';
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // Perfil del ciclista
   String _userName = 'Alejandro';
   String _userInitials = 'AL';
@@ -34,6 +36,14 @@ class AppState extends ChangeNotifier {
   MapLayerType _activeLayer = MapLayerType.streets;
   bool _heatmapEnabled = true;
   bool _trackingEnabled = true; // false = Modo Sigilo / Invisible
+  bool _sosAlertNotificationsEnabled = false;
+  bool _hasVerifiedUserLocation = false;
+  String? _sosPushStatus;
+  String? _activeSosId;
+  Timer? _presenceTimer;
+  bool _presencePublishInProgress = false;
+  DateTime? _lastPresencePublishedAt;
+  LatLng? _lastPresencePosition;
 
   // Alarmas del sistema (Radar iOS por defecto según AGENTS.md)
   AlarmPreset _activeAlarm = AlarmPreset.radarIos;
@@ -53,6 +63,7 @@ class AppState extends ChangeNotifier {
 
   final AudioAlarmService _audioService = AudioAlarmService();
   final LocationService _locationService = LocationService();
+  final SosPushService _sosPushService = SosPushService();
 
   // Getters
   String get userName => _userName;
@@ -70,9 +81,13 @@ class AppState extends ChangeNotifier {
   int get currentScreenIndex => _currentScreenIndex;
   LatLng get userLocation => _userLocation;
   bool get isLoadingLocation => _isLoadingLocation;
+  bool get hasVerifiedUserLocation => _hasVerifiedUserLocation;
   MapLayerType get activeLayer => _activeLayer;
   bool get heatmapEnabled => _heatmapEnabled;
   bool get trackingEnabled => _trackingEnabled;
+  bool get sosPushConfigured => _sosPushService.isConfigured;
+  bool get sosAlertNotificationsEnabled => _sosAlertNotificationsEnabled;
+  String? get sosPushStatus => _sosPushStatus;
   AlarmPreset get activeAlarm => _activeAlarm;
   bool get isCountingDown => _isCountingDown;
   int get countdownSeconds => _countdownSeconds;
@@ -82,6 +97,7 @@ class AppState extends ChangeNotifier {
   List<HeatmapCorridor> get corridors => _corridors;
 
   AppState() {
+    WidgetsBinding.instance.addObserver(this);
     _initApp();
   }
 
@@ -94,6 +110,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     await _audioService.init();
+    try {
+      await _sosPushService.initialize(
+        onIncomingSos: _handleIncomingPush,
+        onError: (message) {
+          _sosPushStatus = message;
+          notifyListeners();
+        },
+      );
+    } on SosPushException catch (error) {
+      _sosPushStatus = error.message;
+      notifyListeners();
+    }
+
     await refreshLocation();
     _corridors = CommunityData.getSampleCorridors(_userLocation);
     _communityCyclists = CommunityData.getInitialCyclists(_userLocation);
@@ -102,8 +131,16 @@ class AppState extends ChangeNotifier {
     // Iniciar rastreo continuo
     _locationService.startTracking((newPos) {
       _userLocation = newPos;
+      _hasVerifiedUserLocation = true;
+      if (_sosAlertNotificationsEnabled &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_publishSosPresence());
+      }
       notifyListeners();
     });
+    if (_sosAlertNotificationsEnabled && _sosPushService.isInitialized) {
+      _startPresenceUpdates();
+    }
   }
 
   void _loadPreferences(SharedPreferences preferences) {
@@ -116,6 +153,8 @@ class AppState extends ChangeNotifier {
     _isRegistered = preferences.getBool('profile.isRegistered') ?? false;
     _trackingEnabled = preferences.getBool('privacy.trackingEnabled') ?? _trackingEnabled;
     _heatmapEnabled = preferences.getBool('map.heatmapEnabled') ?? _heatmapEnabled;
+    _sosAlertNotificationsEnabled =
+        preferences.getBool('sos.alertsEnabled') ?? false;
 
     final layerName = preferences.getString('map.activeLayer');
     if (layerName != null) {
@@ -205,7 +244,10 @@ class AppState extends ChangeNotifier {
     _isLoadingLocation = true;
     notifyListeners();
 
-    _userLocation = await _locationService.getCurrentLocation();
+    final verifiedLocation =
+        await _locationService.getVerifiedCurrentLocation();
+    _hasVerifiedUserLocation = verifiedLocation != null;
+    _userLocation = verifiedLocation ?? LocationService.defaultLocation;
     _isLoadingLocation = false;
     _corridors = CommunityData.getSampleCorridors(_userLocation);
     _communityCyclists = CommunityData.getInitialCyclists(_userLocation);
@@ -214,6 +256,176 @@ class AppState extends ChangeNotifier {
 
   void setScreenIndex(int index) {
     _currentScreenIndex = index;
+    notifyListeners();
+  }
+
+  Future<void> setSosAlertNotificationsEnabled(bool enabled) async {
+    if (!enabled) {
+      final preferences = await SharedPreferences.getInstance();
+      if (!await preferences.setBool('sos.alertsEnabled', false)) {
+        throw StateError('No se pudo guardar la preferencia de alertas SOS.');
+      }
+      _sosAlertNotificationsEnabled = false;
+      _presenceTimer?.cancel();
+      _presenceTimer = null;
+      _sosPushStatus = null;
+      notifyListeners();
+      if (_sosPushService.isInitialized) {
+        try {
+          await _sosPushService.disableSosAlerts();
+        } on SosPushException catch (error) {
+          _sosPushStatus = error.message;
+          notifyListeners();
+          rethrow;
+        }
+      }
+      return;
+    }
+
+    if (!_sosPushService.isConfigured || !_sosPushService.isInitialized) {
+      throw const SosPushException(
+        'Firebase aún no está configurado. No se activaron las alertas SOS.',
+      );
+    }
+
+    final granted = await _sosPushService.enableSosAlerts();
+    if (!granted) {
+      throw const SosPushException(
+        'El permiso de notificaciones fue rechazado; las alertas SOS siguen desactivadas.',
+      );
+    }
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setBool('sos.alertsEnabled', true)) {
+      await _sosPushService.disableSosAlerts();
+      throw StateError('No se pudo guardar la preferencia de alertas SOS.');
+    }
+
+    _sosAlertNotificationsEnabled = true;
+    _sosPushStatus = 'Recibirás alertas SOS de ciclistas cercanos.';
+    notifyListeners();
+    _startPresenceUpdates();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_sosAlertNotificationsEnabled || !_sosPushService.isInitialized) {
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      _startPresenceUpdates();
+    } else {
+      _presenceTimer?.cancel();
+      _presenceTimer = null;
+      _lastPresencePublishedAt = null;
+      _lastPresencePosition = null;
+      unawaited(_clearSosPresence());
+    }
+  }
+
+  void _startPresenceUpdates() {
+    _presenceTimer?.cancel();
+    unawaited(_publishSosPresence(force: true));
+    _presenceTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => unawaited(_publishSosPresence(force: true)),
+    );
+  }
+
+  Future<void> _publishSosPresence({bool force = false}) async {
+    if (!_sosAlertNotificationsEnabled ||
+        !_sosPushService.isInitialized ||
+        _presencePublishInProgress) {
+      return;
+    }
+    if (!_hasVerifiedUserLocation) {
+      _sosPushStatus =
+          'Alertas activas, pero tu GPS no está disponible para aparecer en el radio de 10 km.';
+      notifyListeners();
+      return;
+    }
+    final now = DateTime.now();
+    final previousPosition = _lastPresencePosition;
+    final movedMeters = previousPosition == null
+        ? double.infinity
+        : const Distance().as(
+            LengthUnit.Meter,
+            previousPosition,
+            _userLocation,
+          );
+    if (!force &&
+        _lastPresencePublishedAt != null &&
+        now.difference(_lastPresencePublishedAt!) <
+            const Duration(seconds: 30) &&
+        movedMeters < 100) {
+      return;
+    }
+    _presencePublishInProgress = true;
+    try {
+      await _sosPushService.updateSosPresence(
+        latitude: _userLocation.latitude,
+        longitude: _userLocation.longitude,
+      );
+      _lastPresencePublishedAt = now;
+      _lastPresencePosition = _userLocation;
+      _sosPushStatus = 'Ubicación compartida solo mientras usas la app.';
+    } on SosPushException catch (error) {
+      _sosPushStatus = error.message;
+    } finally {
+      _presencePublishInProgress = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _clearSosPresence() async {
+    try {
+      await _sosPushService.clearSosPresence();
+    } on SosPushException catch (error) {
+      _sosPushStatus = error.message;
+      notifyListeners();
+    }
+  }
+
+  void _handleIncomingPush(RemoteMessage message) {
+    final data = message.data;
+    final latitude = double.tryParse(data['latitude']?.toString() ?? '');
+    final longitude = double.tryParse(data['longitude']?.toString() ?? '');
+    final sosId = data['sosId']?.toString();
+    if (latitude == null ||
+        longitude == null ||
+        sosId == null ||
+        sosId.isEmpty) {
+      _sosPushStatus = 'Se recibió una alerta SOS con datos incompletos.';
+      notifyListeners();
+      return;
+    }
+
+    if (data['senderId'] == _sosPushService.currentUserId) {
+      _activeSosId = sosId;
+      final shouldStartAlarm = !_isEmergencyActive;
+      _isEmergencyActive = true;
+      _sosPushStatus = 'Tu SOS sigue activo.';
+      if (shouldStartAlarm) {
+        _audioService.triggerEmergencyAlarm(preset: _activeAlarm);
+      }
+    } else {
+      if (_incomingEmergency?.id == sosId) return;
+      final position = LatLng(latitude, longitude);
+      final distanceKm =
+          const Distance().as(LengthUnit.Kilometer, _userLocation, position);
+      final name = data['riderName']?.toString() ?? 'Ciclista cercano';
+      _incomingEmergency = Cyclist(
+        id: sosId,
+        name: name,
+        initials: _initialsFor(name),
+        distanceKm: distanceKm,
+        position: position,
+        isEmergency: true,
+        lastSeen: 'SOS activo',
+        bikeModel: 'No informado',
+      );
+      _audioService.triggerEmergencyAlarm(preset: _activeAlarm);
+    }
+    _currentScreenIndex = 1;
     notifyListeners();
   }
 
@@ -335,15 +547,76 @@ class AppState extends ChangeNotifier {
 
   /// Dispara la alerta SOS activa con volumen forzado al máximo
   void triggerEmergencySos() {
+    if (_isEmergencyActive) return;
     _isEmergencyActive = true;
+    _sosPushStatus = null;
     notifyListeners();
     _audioService.triggerEmergencyAlarm(preset: _activeAlarm);
+    unawaited(_sendSosToBackend());
+  }
+
+  Future<void> _sendSosToBackend() async {
+    if (!_sosPushService.isConfigured) {
+      _sosPushStatus =
+          'SOS local activo; Firebase no está configurado y no se envió un push.';
+      notifyListeners();
+      return;
+    }
+    if (!_sosPushService.isInitialized) {
+      _sosPushStatus = _sosPushStatus ??
+          'SOS local activo; Firebase no pudo inicializarse y no se envió un push.';
+      notifyListeners();
+      return;
+    }
+
+    final position = await _locationService.getVerifiedCurrentLocation();
+    if (!_isEmergencyActive) return;
+    if (position == null) {
+      _sosPushStatus =
+          'SOS local activo; no se envió el push porque no se pudo obtener tu ubicación GPS.';
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final sosId = await _sosPushService.activateSos(
+        riderName: _userName,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (!_isEmergencyActive) {
+        await _sosPushService.resolveSos(sosId);
+        _sosPushStatus = 'SOS remoto desactivado.';
+        notifyListeners();
+        return;
+      }
+      _activeSosId = sosId;
+      _sosPushStatus =
+          'SOS registrado por el backend. La entrega depende de permisos y dispositivos receptores.';
+    } on SosPushException catch (error) {
+      _sosPushStatus =
+          'SOS local activo, pero no se pudo enviar la alerta remota: ${error.message}';
+    }
+    notifyListeners();
   }
 
   /// Detiene la alarma activa y silencia la sirena
   void dismissEmergencySos() {
     _isEmergencyActive = false;
     _audioService.stopAlarm();
+    final sosId = _activeSosId;
+    _activeSosId = null;
+    if (sosId != null) unawaited(_resolveSosOnBackend(sosId));
+    notifyListeners();
+  }
+
+  Future<void> _resolveSosOnBackend(String sosId) async {
+    try {
+      await _sosPushService.resolveSos(sosId);
+      _sosPushStatus = 'SOS desactivado.';
+    } on SosPushException catch (error) {
+      _sosPushStatus = 'No se pudo cerrar el SOS remoto: ${error.message}';
+    }
     notifyListeners();
   }
 
@@ -367,6 +640,10 @@ class AppState extends ChangeNotifier {
   }
 
   void dismissIncomingEmergency() {
+    dismissIncomingSos();
+  }
+
+  void dismissIncomingSos() {
     _incomingEmergency = null;
     _audioService.stopAlarm();
     notifyListeners();
@@ -374,9 +651,12 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
+    _presenceTimer?.cancel();
     _locationService.stopTracking();
     _audioService.dispose();
+    unawaited(_sosPushService.dispose());
     super.dispose();
   }
 }

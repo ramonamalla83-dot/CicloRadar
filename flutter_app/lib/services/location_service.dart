@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -49,6 +50,29 @@ class LocationService {
       return LatLng(position.latitude, position.longitude);
     } catch (_) {
       return defaultLocation;
+    }
+  }
+
+  Future<LatLng?> getVerifiedCurrentLocation() async {
+    try {
+      final hasPermission = await requestLocationPermission();
+      if (!hasPermission) return null;
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      return LatLng(position.latitude, position.longitude);
+    } on TimeoutException {
+      return null;
+    } on LocationServiceDisabledException {
+      return null;
+    } on PermissionDeniedException {
+      return null;
+    } on PlatformException {
+      return null;
     }
   }
 

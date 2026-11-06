@@ -8,6 +8,7 @@ import '../models/alarm_preset.dart';
 import '../models/cyclist.dart';
 import '../models/map_layer.dart';
 import '../models/sos_contact.dart';
+import '../services/advanced_night_mode_service.dart';
 import '../services/audio_alarm_service.dart';
 import '../services/location_service.dart';
 import '../services/sos_push_service.dart';
@@ -23,7 +24,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool _isRegistered = false;
   bool _isReady = false;
   List<SosContact> _emergencyContacts = [];
-  String _emergencyMessage = '¡Emergencia ciclista! Necesito asistencia en mi ubicación GPS.';
+  String _emergencyMessage =
+      '¡Emergencia ciclista! Necesito asistencia en mi ubicación GPS.';
 
   // Pantalla activa (0: Inicio, 1: Mapa, 2: Comunidad, 3: Contactos SOS, 4: Perfil)
   int _currentScreenIndex = 0;
@@ -34,6 +36,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   // Capas y Modos del Mapa (Día / Streets por defecto según AGENTS.md)
   MapLayerType _activeLayer = MapLayerType.streets;
+  MapLayerType _preferredMapLayer = MapLayerType.streets;
+  bool _automaticNightModeEnabled = true;
+  bool _advancedNightModeEnabled = false;
+  String _advancedNightModeStatus = 'Desactivado';
+  Timer? _nightModeTimer;
   bool _heatmapEnabled = true;
   bool _trackingEnabled = true; // false = Modo Sigilo / Invisible
   bool _sosAlertNotificationsEnabled = false;
@@ -61,9 +68,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   List<Cyclist> _communityCyclists = [];
   List<HeatmapCorridor> _corridors = [];
 
-  final AudioAlarmService _audioService = AudioAlarmService();
+  late final AudioAlarmService _audioService = AudioAlarmService();
   final LocationService _locationService = LocationService();
   final SosPushService _sosPushService = SosPushService();
+  final AdvancedNightModeService _nightModeService =
+      const AdvancedNightModeService();
+  late final DateTime Function() _localClock;
+  late final Brightness Function() _platformBrightness;
 
   // Getters
   String get userName => _userName;
@@ -74,15 +85,22 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   String get experienceLevel => _experienceLevel;
   bool get isRegistered => _isRegistered;
   bool get isReady => _isReady;
-  List<SosContact> get emergencyContacts => List.unmodifiable(_emergencyContacts);
-  String get emergencyContact =>
-      _emergencyContacts.isEmpty ? 'Sin configurar' : _emergencyContacts.first.phone;
+  List<SosContact> get emergencyContacts =>
+      List.unmodifiable(_emergencyContacts);
+  String get emergencyContact => _emergencyContacts.isEmpty
+      ? 'Sin configurar'
+      : _emergencyContacts.first.phone;
   String get emergencyMessage => _emergencyMessage;
   int get currentScreenIndex => _currentScreenIndex;
   LatLng get userLocation => _userLocation;
   bool get isLoadingLocation => _isLoadingLocation;
   bool get hasVerifiedUserLocation => _hasVerifiedUserLocation;
   MapLayerType get activeLayer => _activeLayer;
+  MapLayerType get preferredMapLayer => _preferredMapLayer;
+  bool get automaticNightModeEnabled => _automaticNightModeEnabled;
+  bool get advancedNightModeEnabled => _advancedNightModeEnabled;
+  String get advancedNightModeStatus => _advancedNightModeStatus;
+
   bool get heatmapEnabled => _heatmapEnabled;
   bool get trackingEnabled => _trackingEnabled;
   bool get sosPushConfigured => _sosPushService.isConfigured;
@@ -97,11 +115,26 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   List<HeatmapCorridor> get corridors => _corridors;
 
   AppState() {
+    _localClock = DateTime.now;
+    _platformBrightness =
+        () => WidgetsBinding.instance.platformDispatcher.platformBrightness;
     WidgetsBinding.instance.addObserver(this);
+    _nightModeTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => refreshNightMode(),
+    );
+    refreshNightMode(notify: false);
     _initApp();
   }
 
-  AppState.forTesting() : _isReady = true;
+  AppState.forTesting({
+    DateTime Function()? localClock,
+    Brightness platformBrightness = Brightness.light,
+  })  : _localClock = localClock ?? (() => DateTime(2026, 1, 1, 12)),
+        _platformBrightness = (() => platformBrightness),
+        _isReady = true {
+    refreshNightMode(notify: false);
+  }
 
   Future<void> _initApp() async {
     final preferences = await SharedPreferences.getInstance();
@@ -149,20 +182,26 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _bikeModel = preferences.getString('profile.bikeModel') ?? _bikeModel;
     _phoneNumber = preferences.getString('profile.phone') ?? _phoneNumber;
     _bikeType = preferences.getString('profile.bikeType') ?? _bikeType;
-    _experienceLevel = preferences.getString('profile.experienceLevel') ?? _experienceLevel;
+    _experienceLevel =
+        preferences.getString('profile.experienceLevel') ?? _experienceLevel;
     _isRegistered = preferences.getBool('profile.isRegistered') ?? false;
-    _trackingEnabled = preferences.getBool('privacy.trackingEnabled') ?? _trackingEnabled;
-    _heatmapEnabled = preferences.getBool('map.heatmapEnabled') ?? _heatmapEnabled;
+    _trackingEnabled =
+        preferences.getBool('privacy.trackingEnabled') ?? _trackingEnabled;
+    _heatmapEnabled =
+        preferences.getBool('map.heatmapEnabled') ?? _heatmapEnabled;
+    _automaticNightModeEnabled =
+        preferences.getBool('map.automaticNightModeEnabled') ?? true;
     _sosAlertNotificationsEnabled =
         preferences.getBool('sos.alertsEnabled') ?? false;
 
     final layerName = preferences.getString('map.activeLayer');
     if (layerName != null) {
-      _activeLayer = MapLayerType.values.firstWhere(
+      _preferredMapLayer = MapLayerType.values.firstWhere(
         (layer) => layer.name == layerName,
         orElse: () => MapLayerType.streets,
       );
     }
+    refreshNightMode(notify: false);
 
     final alarmName = preferences.getString('sos.activeAlarm');
     if (alarmName != null) {
@@ -176,11 +215,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (contactsJson != null) {
       final decoded = jsonDecode(contactsJson);
       if (decoded is! List) {
-        throw const FormatException('La lista de contactos SOS guardada no es válida.');
+        throw const FormatException(
+            'La lista de contactos SOS guardada no es válida.');
       }
       _emergencyContacts = decoded.map((entry) {
         if (entry is! Map<String, dynamic>) {
-          throw const FormatException('Contacto SOS guardado con formato inválido.');
+          throw const FormatException(
+              'Contacto SOS guardado con formato inválido.');
         }
         return SosContact.fromJson(entry);
       }).toList();
@@ -208,7 +249,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       preferences.setBool('profile.isRegistered', true),
     ]);
     if (results.any((saved) => !saved)) {
-      throw StateError('El almacenamiento local rechazó uno o más datos del perfil.');
+      throw StateError(
+          'El almacenamiento local rechazó uno o más datos del perfil.');
     }
 
     _phoneNumber = trimmedPhone;
@@ -222,13 +264,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   String _initialsFor(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
     final words = parts.toList();
     if (words.isEmpty) return 'U';
     if (words.length > 1) {
       return '${words.first[0]}${words[1][0]}'.toUpperCase();
     }
-    return words.first.substring(0, words.first.length >= 2 ? 2 : 1).toUpperCase();
+    return words.first
+        .substring(0, words.first.length >= 2 ? 2 : 1)
+        .toUpperCase();
   }
 
   void _savePreference(Future<bool> Function(SharedPreferences) save) {
@@ -308,6 +353,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      refreshNightMode();
+    }
     if (!_sosAlertNotificationsEnabled || !_sosPushService.isInitialized) {
       return;
     }
@@ -320,6 +368,53 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       _lastPresencePosition = null;
       unawaited(_clearSosPresence());
     }
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    refreshNightMode();
+  }
+
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    refreshNightMode();
+  }
+
+  void refreshNightMode({
+    DateTime? localTime,
+    Brightness? platformBrightness,
+    bool notify = true,
+  }) {
+    final now = localTime ?? _localClock();
+    final brightness = platformBrightness ?? _platformBrightness();
+    final shouldEnable = _automaticNightModeEnabled &&
+        _nightModeService.shouldEnable(
+          localTime: now,
+          platformBrightness: brightness,
+        );
+    final status = !_automaticNightModeEnabled
+        ? 'Desactivado (activación automática deshabilitada)'
+        : _nightModeService.activationReason(
+            localTime: now,
+            platformBrightness: brightness,
+          );
+    final didChange = shouldEnable != _advancedNightModeEnabled;
+    final didStatusChange = status != _advancedNightModeStatus;
+    _advancedNightModeEnabled = shouldEnable;
+    _advancedNightModeStatus = status;
+    _activeLayer = shouldEnable ? MapLayerType.dark : _preferredMapLayer;
+    if ((didChange || didStatusChange) && notify) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> setAutomaticNightModeEnabled(bool enabled) async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setBool('map.automaticNightModeEnabled', enabled)) {
+      throw StateError('No se pudo guardar la preferencia del modo nocturno.');
+    }
+    _automaticNightModeEnabled = enabled;
+    refreshNightMode();
   }
 
   void _startPresenceUpdates() {
@@ -430,8 +525,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void setMapLayer(MapLayerType layer) {
-    _activeLayer = layer;
-    _savePreference((preferences) => preferences.setString('map.activeLayer', layer.name));
+    _preferredMapLayer = layer;
+    _activeLayer =
+        _advancedNightModeEnabled ? MapLayerType.dark : _preferredMapLayer;
+    _savePreference(
+        (preferences) => preferences.setString('map.activeLayer', layer.name));
     notifyListeners();
   }
 
@@ -451,7 +549,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   void setActiveAlarm(AlarmPreset preset) {
     _activeAlarm = preset;
-    _savePreference((preferences) => preferences.setString('sos.activeAlarm', preset.name));
+    _savePreference(
+        (preferences) => preferences.setString('sos.activeAlarm', preset.name));
     notifyListeners();
   }
 
@@ -468,12 +567,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (name != null && name.isNotEmpty) {
       _userName = name.trim();
       _userInitials = _initialsFor(_userName);
-      _savePreference((preferences) => preferences.setString('profile.name', _userName));
+      _savePreference(
+          (preferences) => preferences.setString('profile.name', _userName));
     }
     if (bikeModel != null) {
       _bikeModel = bikeModel;
-      _savePreference(
-          (preferences) => preferences.setString('profile.bikeModel', _bikeModel));
+      _savePreference((preferences) =>
+          preferences.setString('profile.bikeModel', _bikeModel));
     }
     if (contact != null && contact.trim().isNotEmpty) {
       _emergencyContacts = [
@@ -487,7 +587,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (message != null) {
       _emergencyMessage = message;
-      _savePreference((preferences) => preferences.setString('sos.message', message));
+      _savePreference(
+          (preferences) => preferences.setString('sos.message', message));
     }
     notifyListeners();
   }
@@ -622,7 +723,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Simula una alerta entrante de un ciclista cercano para probar el radar
   void simulateIncomingEmergency() {
-    final alertPos = LatLng(_userLocation.latitude + 0.0019, _userLocation.longitude + 0.0014);
+    final alertPos = LatLng(
+        _userLocation.latitude + 0.0019, _userLocation.longitude + 0.0014);
     _incomingEmergency = Cyclist(
       id: 'alert-sim-1',
       name: 'Elena Gómez (Alerta SOS)',
@@ -653,6 +755,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
+    _nightModeTimer?.cancel();
     _presenceTimer?.cancel();
     _locationService.stopTracking();
     _audioService.dispose();

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/cyclist.dart';
 import '../models/map_layer.dart';
 import '../providers/app_state.dart';
+import '../widgets/advanced_night_mode_filter.dart';
 import '../widgets/weather_map_widget.dart';
 
 class MapScreen extends StatefulWidget {
@@ -82,8 +83,10 @@ class _MapScreenState extends State<MapScreen> {
                         height: 44,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFFF97316).withValues(alpha: 0.25),
-                          border: Border.all(color: const Color(0xFFF97316), width: 2),
+                          color:
+                              const Color(0xFFF97316).withValues(alpha: 0.25),
+                          border: Border.all(
+                              color: const Color(0xFFF97316), width: 2),
                         ),
                       ),
                       Container(
@@ -94,7 +97,9 @@ class _MapScreenState extends State<MapScreen> {
                           color: Color(0xFFF97316), // orange-500
                         ),
                         child: Icon(
-                          appState.trackingEnabled ? Icons.directions_bike : Icons.visibility_off,
+                          appState.trackingEnabled
+                              ? Icons.directions_bike
+                              : Icons.visibility_off,
                           color: Colors.white,
                           size: 16,
                         ),
@@ -120,7 +125,9 @@ class _MapScreenState extends State<MapScreen> {
                               ? Colors.red
                               : const Color(0xFF27272A),
                           border: Border.all(
-                            color: cyclist.isEmergency ? Colors.white : const Color(0xFFF97316),
+                            color: cyclist.isEmergency
+                                ? Colors.white
+                                : const Color(0xFFF97316),
                             width: 2,
                           ),
                           boxShadow: const [
@@ -151,65 +158,71 @@ class _MapScreenState extends State<MapScreen> {
 
         // 2. HEADER FLOTANTE CON RESUMEN DEL RADAR
         PositionSafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Indicador de Estado del Radar
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF09090B).withValues(alpha: 0.90),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white12),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black45, blurRadius: 10),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: appState.trackingEnabled
-                              ? const Color(0xFF22C55E)
-                              : Colors.amber,
+          child: AdvancedNightModeFilter(
+            enabled: appState.advancedNightModeEnabled,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Indicador de Estado del Radar
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF09090B).withValues(alpha: 0.90),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white12),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black45, blurRadius: 10),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: appState.trackingEnabled
+                                ? const Color(0xFF22C55E)
+                                : Colors.amber,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        appState.trackingEnabled
-                            ? '${appState.communityCyclists.length} ciclistas de ejemplo'
-                            : 'Modo Sigilo (Invisible)',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(width: 8),
+                        Text(
+                          appState.trackingEnabled
+                              ? '${appState.communityCyclists.length} ciclistas de ejemplo'
+                              : 'Modo Sigilo (Invisible)',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
 
-                // Botón de Selector de Capas Ráster
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF09090B).withValues(alpha: 0.90),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white12),
+                  // Botón de Selector de Capas Ráster
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF09090B).withValues(alpha: 0.90),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.layers_outlined,
+                          color: Colors.white, size: 20),
+                      tooltip: 'Cambiar capa del mapa',
+                      onPressed: () {
+                        _showLayerSelectorModal(context, appState);
+                      },
+                    ),
                   ),
-                  child: IconButton(
-                    icon: const Icon(Icons.layers_outlined, color: Colors.white, size: 20),
-                    tooltip: 'Cambiar capa del mapa',
-                    onPressed: () {
-                      _showLayerSelectorModal(context, appState);
-                    },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -218,10 +231,13 @@ class _MapScreenState extends State<MapScreen> {
           top: MediaQuery.of(context).padding.top + 62,
           left: 16,
           right: 16,
-          child: WeatherMapWidget(
-            location: appState.hasVerifiedUserLocation
-                ? appState.userLocation
-                : null,
+          child: AdvancedNightModeFilter(
+            enabled: appState.advancedNightModeEnabled,
+            child: WeatherMapWidget(
+              location: appState.hasVerifiedUserLocation
+                  ? appState.userLocation
+                  : null,
+            ),
           ),
         ),
 
@@ -232,30 +248,36 @@ class _MapScreenState extends State<MapScreen> {
           child: Column(
             children: [
               // Botón Mapa de Calor (Toggle)
-              FloatingActionButton.small(
-                heroTag: 'fab_heatmap',
-                backgroundColor: appState.heatmapEnabled
-                    ? const Color(0xFFF97316)
-                    : const Color(0xFF18181B),
-                foregroundColor: Colors.white,
-                onPressed: () {
-                  appState.toggleHeatmap();
-                },
-                tooltip: 'Alternar mapa de calor',
-                child: const Icon(Icons.local_fire_department, size: 22),
+              AdvancedNightModeFilter(
+                enabled: appState.advancedNightModeEnabled,
+                child: FloatingActionButton.small(
+                  heroTag: 'fab_heatmap',
+                  backgroundColor: appState.heatmapEnabled
+                      ? const Color(0xFFF97316)
+                      : const Color(0xFF18181B),
+                  foregroundColor: Colors.white,
+                  onPressed: () {
+                    appState.toggleHeatmap();
+                  },
+                  tooltip: 'Alternar mapa de calor',
+                  child: const Icon(Icons.local_fire_department, size: 22),
+                ),
               ),
               const SizedBox(height: 12),
 
               // Botón Recentrar GPS
-              FloatingActionButton.small(
-                heroTag: 'fab_gps',
-                backgroundColor: const Color(0xFF18181B),
-                foregroundColor: Colors.white,
-                onPressed: () {
-                  _recenterMap(appState.userLocation);
-                },
-                tooltip: 'Recentrar GPS',
-                child: const Icon(Icons.my_location, size: 20),
+              AdvancedNightModeFilter(
+                enabled: appState.advancedNightModeEnabled,
+                child: FloatingActionButton.small(
+                  heroTag: 'fab_gps',
+                  backgroundColor: const Color(0xFF18181B),
+                  foregroundColor: Colors.white,
+                  onPressed: () {
+                    _recenterMap(appState.userLocation);
+                  },
+                  tooltip: 'Recentrar GPS',
+                  child: const Icon(Icons.my_location, size: 20),
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -271,7 +293,10 @@ class _MapScreenState extends State<MapScreen> {
                 icon: const Icon(Icons.sos, size: 24),
                 label: const Text(
                   'SOS',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      letterSpacing: 1),
                 ),
               ),
             ],
@@ -296,7 +321,8 @@ class _MapScreenState extends State<MapScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 32),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: Colors.white, size: 32),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -358,8 +384,16 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (appState.advancedNightModeEnabled)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'La capa Oscuro se activa temporalmente. Tu elección se restaurará al terminar el modo nocturno.',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                  ),
+                ),
               ...MapLayerConfig.allLayers.map((layer) {
-                final isSelected = layer.type == appState.activeLayer;
+                final isSelected = layer.type == appState.preferredMapLayer;
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
@@ -379,14 +413,17 @@ class _MapScreenState extends State<MapScreen> {
                               : layer.type == MapLayerType.satellite
                                   ? Icons.satellite_alt
                                   : Icons.terrain,
-                      color: isSelected ? const Color(0xFFF97316) : Colors.white70,
+                      color:
+                          isSelected ? const Color(0xFFF97316) : Colors.white70,
                     ),
                   ),
                   title: Text(
                     layer.name,
                     style: TextStyle(
-                      color: isSelected ? const Color(0xFFF97316) : Colors.white,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color:
+                          isSelected ? const Color(0xFFF97316) : Colors.white,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                   subtitle: Text(
@@ -430,7 +467,8 @@ class _MapScreenState extends State<MapScreen> {
                     radius: 22,
                     child: Text(
                       cyclist.initials,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -447,7 +485,8 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       Text(
                         'A ${cyclist.distanceKm} km de tu posición',
-                        style: const TextStyle(color: Color(0xFFF97316), fontSize: 13),
+                        style: const TextStyle(
+                            color: Color(0xFFF97316), fontSize: 13),
                       ),
                     ],
                   ),
@@ -456,7 +495,8 @@ class _MapScreenState extends State<MapScreen> {
               const SizedBox(height: 18),
               _buildInfoRow(Icons.pedal_bike, 'Bicicleta', cyclist.bikeModel),
               _buildInfoRow(Icons.access_time, 'Estado', cyclist.lastSeen),
-              _buildInfoRow(Icons.battery_charging_full, 'Batería del Radar', '${cyclist.batteryLevel}%'),
+              _buildInfoRow(Icons.battery_charging_full, 'Batería del Radar',
+                  '${cyclist.batteryLevel}%'),
             ],
           ),
         );
@@ -471,8 +511,13 @@ class _MapScreenState extends State<MapScreen> {
         children: [
           Icon(icon, size: 18, color: Colors.grey.shade400),
           const SizedBox(width: 10),
-          Text('$label: ', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+          Text('$label: ',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13)),
         ],
       ),
     );

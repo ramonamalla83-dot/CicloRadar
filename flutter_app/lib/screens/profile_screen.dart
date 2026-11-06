@@ -118,12 +118,14 @@ class ProfileScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         appState.bikeModel,
-                        style: const TextStyle(color: Color(0xFFF97316), fontSize: 13),
+                        style: const TextStyle(
+                            color: Color(0xFFF97316), fontSize: 13),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Contacto SOS: ${appState.emergencyContact}',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 12),
                       ),
                     ],
                   ),
@@ -134,6 +136,44 @@ class ProfileScreen extends StatelessWidget {
                   icon: const Icon(Icons.edit_outlined),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          Material(
+            color: const Color(0xFF18181B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Colors.white10),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: SwitchListTile(
+              value: appState.automaticNightModeEnabled,
+              onChanged: (enabled) async {
+                try {
+                  await appState.setAutomaticNightModeEnabled(enabled);
+                } catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error.toString())),
+                  );
+                }
+              },
+              activeThumbColor: const Color(0xFFF97316),
+              secondary: Icon(
+                appState.advancedNightModeEnabled
+                    ? Icons.dark_mode
+                    : Icons.dark_mode_outlined,
+                color: const Color(0xFFF97316),
+              ),
+              title: const Text(
+                'Modo nocturno avanzado automático',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              subtitle: Text(
+                '${appState.advancedNightModeStatus}. Usa el mapa nocturno y atenúa la interfaz. Puedes cambiar la capa del mapa manualmente.',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -157,8 +197,12 @@ class ProfileScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    appState.trackingEnabled ? Icons.radar : Icons.visibility_off,
-                    color: appState.trackingEnabled ? const Color(0xFF22C55E) : Colors.grey,
+                    appState.trackingEnabled
+                        ? Icons.radar
+                        : Icons.visibility_off,
+                    color: appState.trackingEnabled
+                        ? const Color(0xFF22C55E)
+                        : Colors.grey,
                     size: 22,
                   ),
                 ),
@@ -179,7 +223,8 @@ class ProfileScreen extends StatelessWidget {
                         appState.trackingEnabled
                             ? 'Visibilidad habilitada; la comunidad es de ejemplo por ahora'
                             : 'Modo Sigilo activo (Navegas de incógnito)',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 12),
                       ),
                     ],
                   ),
@@ -282,7 +327,10 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 child: const Text(
                   'AUDIO AL 100%',
-                  style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -308,7 +356,8 @@ class ProfileScreen extends StatelessWidget {
                     color: const Color(0xFF18181B),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: isSelected ? const Color(0xFFF97316) : Colors.white10,
+                      color:
+                          isSelected ? const Color(0xFFF97316) : Colors.white10,
                       width: isSelected ? 1.5 : 1.0,
                     ),
                   ),
@@ -317,16 +366,20 @@ class ProfileScreen extends StatelessWidget {
                     title: Text(
                       preset.title,
                       style: TextStyle(
-                        color: isSelected ? const Color(0xFFF97316) : Colors.white,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color:
+                            isSelected ? const Color(0xFFF97316) : Colors.white,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w500,
                       ),
                     ),
                     subtitle: Text(
                       '${preset.manufacturer} • ${preset.subtitle}',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                      style:
+                          TextStyle(color: Colors.grey.shade400, fontSize: 11),
                     ),
                     trailing: IconButton(
-                      icon: const Icon(Icons.volume_up_outlined, color: Colors.white70),
+                      icon: const Icon(Icons.volume_up_outlined,
+                          color: Colors.white70),
                       tooltip: 'Probar sonido',
                       onPressed: () {
                         appState.previewAlarmSound(preset.id);
@@ -363,10 +416,14 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildPermissionRow('GPS', 'Madrid si falta permiso o señal', Icons.gps_fixed, false),
-                _buildPermissionRow('Wake Lock', 'Se intenta durante la alarma', Icons.screen_lock_portrait, false),
-                _buildPermissionRow('Vibración', 'Solo en equipos compatibles', Icons.vibration, false),
-                _buildPermissionRow('Audio SOS', 'No controla el volumen físico', Icons.volume_up, false),
+                _buildPermissionRow('GPS', 'Madrid si falta permiso o señal',
+                    Icons.gps_fixed, false),
+                _buildPermissionRow('Wake Lock', 'Se intenta durante la alarma',
+                    Icons.screen_lock_portrait, false),
+                _buildPermissionRow('Vibración', 'Solo en equipos compatibles',
+                    Icons.vibration, false),
+                _buildPermissionRow('Audio SOS',
+                    'No controla el volumen físico', Icons.volume_up, false),
               ],
             ),
           ),
@@ -376,17 +433,23 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPermissionRow(String title, String status, IconData icon, bool ok) {
+  Widget _buildPermissionRow(
+      String title, String status, IconData icon, bool ok) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: ok ? const Color(0xFF10B981) : Colors.grey),
+          Icon(icon,
+              size: 18, color: ok ? const Color(0xFF10B981) : Colors.grey),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            child: Text(title,
+                style: const TextStyle(color: Colors.white, fontSize: 13)),
           ),
-          Text(status, style: TextStyle(color: ok ? const Color(0xFF10B981) : Colors.grey, fontSize: 12)),
+          Text(status,
+              style: TextStyle(
+                  color: ok ? const Color(0xFF10B981) : Colors.grey,
+                  fontSize: 12)),
         ],
       ),
     );

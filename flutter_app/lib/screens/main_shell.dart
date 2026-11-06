@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
+import '../widgets/advanced_night_mode_filter.dart';
 import 'community_screen.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
@@ -16,11 +17,23 @@ class MainShell extends StatelessWidget {
     final appState = context.watch<AppState>();
 
     final screens = [
-      const HomeScreen(),
+      AdvancedNightModeFilter(
+        enabled: appState.advancedNightModeEnabled,
+        child: const HomeScreen(),
+      ),
       const MapScreen(),
-      const CommunityScreen(),
-      const SosContactsScreen(),
-      const ProfileScreen(),
+      AdvancedNightModeFilter(
+        enabled: appState.advancedNightModeEnabled,
+        child: const CommunityScreen(),
+      ),
+      AdvancedNightModeFilter(
+        enabled: appState.advancedNightModeEnabled,
+        child: const SosContactsScreen(),
+      ),
+      AdvancedNightModeFilter(
+        enabled: appState.advancedNightModeEnabled,
+        child: const ProfileScreen(),
+      ),
     ];
 
     return Scaffold(
@@ -44,7 +57,9 @@ class MainShell extends StatelessWidget {
           currentIndex: appState.currentScreenIndex,
           onTap: appState.setScreenIndex,
           backgroundColor: const Color(0xFF09090B),
-          selectedItemColor: const Color(0xFFF97316), // orange-500
+          selectedItemColor: appState.advancedNightModeEnabled
+              ? const Color(0xFFC17A3A)
+              : const Color(0xFFF97316), // orange-500
           unselectedItemColor: Colors.grey.shade500,
           selectedFontSize: 12,
           unselectedFontSize: 12,

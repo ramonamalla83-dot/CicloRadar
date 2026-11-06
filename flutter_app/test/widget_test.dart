@@ -1,5 +1,6 @@
 import 'package:cicloradar/providers/app_state.dart';
 import 'package:cicloradar/main.dart';
+import 'package:cicloradar/models/map_layer.dart';
 import 'package:cicloradar/services/firebase_config.dart';
 import 'package:cicloradar/screens/home_screen.dart';
 import 'package:cicloradar/screens/registration_screen.dart';
@@ -12,6 +13,59 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   test('push integration is not configured without Firebase options', () {
     expect(FirebaseConfig.isConfigured, isFalse);
+  });
+
+  test('automatic night mode temporarily overrides and restores the map layer',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final appState = AppState.forTesting();
+    appState.setMapLayer(MapLayerType.satellite);
+
+    appState.refreshNightMode(
+      localTime: DateTime(2026, 1, 1, 20),
+      platformBrightness: Brightness.light,
+    );
+    expect(appState.advancedNightModeEnabled, isTrue);
+    expect(appState.activeLayer, MapLayerType.dark);
+    expect(appState.preferredMapLayer, MapLayerType.satellite);
+
+    appState.refreshNightMode(
+      localTime: DateTime(2026, 1, 2, 7),
+      platformBrightness: Brightness.light,
+    );
+    expect(appState.advancedNightModeEnabled, isFalse);
+    expect(appState.activeLayer, MapLayerType.satellite);
+  });
+
+  test('automatic night mode follows system darkness outside night hours', () {
+    final appState = AppState.forTesting();
+
+    appState.refreshNightMode(
+      localTime: DateTime(2026, 1, 1, 12),
+      platformBrightness: Brightness.dark,
+    );
+
+    expect(appState.advancedNightModeEnabled, isTrue);
+    expect(appState.activeLayer, MapLayerType.dark);
+  });
+
+  test('disabling automatic night mode restores the preferred map layer',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final appState = AppState.forTesting();
+    appState.setMapLayer(MapLayerType.terrain);
+    appState.refreshNightMode(
+      localTime: DateTime(2026, 1, 1, 20),
+      platformBrightness: Brightness.light,
+    );
+    expect(appState.activeLayer, MapLayerType.dark);
+
+    await appState.setAutomaticNightModeEnabled(false);
+
+    expect(appState.automaticNightModeEnabled, isFalse);
+    expect(appState.advancedNightModeEnabled, isFalse);
+    expect(appState.activeLayer, MapLayerType.terrain);
+    expect(appState.advancedNightModeStatus, contains('Desactivado'));
   });
 
   testWidgets('a new profile opens on registration instead of the map',

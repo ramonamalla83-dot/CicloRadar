@@ -186,7 +186,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 Switch(
                   value: appState.trackingEnabled,
-                  activeColor: const Color(0xFFF97316),
+                  activeThumbColor: const Color(0xFFF97316),
                   onChanged: (val) {
                     appState.toggleTracking();
                   },
@@ -228,51 +228,52 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          ...AlarmPresetConfig.presets.map((preset) {
-            final isSelected = preset.id == appState.activeAlarm;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF18181B),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSelected ? const Color(0xFFF97316) : Colors.white10,
-                  width: isSelected ? 1.5 : 1.0,
-                ),
-              ),
-              child: ListTile(
-                leading: Radio<AlarmPreset>(
-                  value: preset.id,
-                  groupValue: appState.activeAlarm,
-                  activeColor: const Color(0xFFF97316),
-                  onChanged: (val) {
-                    if (val != null) appState.setActiveAlarm(val);
-                  },
-                ),
-                title: Text(
-                  preset.title,
-                  style: TextStyle(
-                    color: isSelected ? const Color(0xFFF97316) : Colors.white,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          RadioGroup<AlarmPreset>(
+            groupValue: appState.activeAlarm,
+            onChanged: (preset) {
+              if (preset != null) appState.setActiveAlarm(preset);
+            },
+            child: Column(
+              children: AlarmPresetConfig.presets.map((preset) {
+                final isSelected = preset.id == appState.activeAlarm;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF18181B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFFF97316) : Colors.white10,
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
                   ),
-                ),
-                subtitle: Text(
-                  '${preset.manufacturer} • ${preset.subtitle}',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.volume_up_outlined, color: Colors.white70),
-                  tooltip: 'Probar sonido',
-                  onPressed: () {
-                    appState.previewAlarmSound(preset.id);
-                  },
-                ),
-                onTap: () {
-                  appState.setActiveAlarm(preset.id);
-                },
-              ),
-            );
-          }),
+                  child: ListTile(
+                    leading: Radio<AlarmPreset>(value: preset.id),
+                    title: Text(
+                      preset.title,
+                      style: TextStyle(
+                        color: isSelected ? const Color(0xFFF97316) : Colors.white,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${preset.manufacturer} • ${preset.subtitle}',
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.volume_up_outlined, color: Colors.white70),
+                      tooltip: 'Probar sonido',
+                      onPressed: () {
+                        appState.previewAlarmSound(preset.id);
+                      },
+                    ),
+                    onTap: () {
+                      appState.setActiveAlarm(preset.id);
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
 
           const SizedBox(height: 24),
 

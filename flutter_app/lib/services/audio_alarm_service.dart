@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
@@ -69,7 +68,7 @@ class AudioAlarmService {
     await _audioPlayer.play(BytesSource(_createTone(preset, const Duration(seconds: 4))));
 
     if (!kIsWeb) {
-      final hasVibrator = await Vibration.hasVibrator() ?? false;
+      final hasVibrator = await Vibration.hasVibrator();
       if (hasVibrator) {
         await Vibration.vibrate(duration: 400);
       }
@@ -148,7 +147,7 @@ class AudioAlarmService {
         return;
       }
       try {
-        final hasCustomVibe = await Vibration.hasCustomVibrationsSupport() ?? false;
+        final hasCustomVibe = await Vibration.hasCustomVibrationsSupport();
         if (hasCustomVibe) {
           await Vibration.vibrate(
             pattern: [0, 400, 200, 400],

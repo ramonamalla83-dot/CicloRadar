@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_state.dart';
 import 'screens/main_shell.dart';
+import 'screens/registration_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,7 +64,33 @@ class CicloRadarFlutterApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const MainShell(),
+      home: Consumer<AppState>(
+        builder: (context, appState, _) {
+          if (!appState.isReady) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (!appState.isRegistered) {
+            return RegistrationScreen(
+              onComplete: ({
+                required String phone,
+                required String name,
+                required String bikeType,
+                required String experienceLevel,
+              }) {
+                return appState.completeRegistration(
+                  phone: phone,
+                  name: name,
+                  bikeType: bikeType,
+                  experienceLevel: experienceLevel,
+                );
+              },
+            );
+          }
+          return const MainShell();
+        },
+      ),
     );
   }
 }

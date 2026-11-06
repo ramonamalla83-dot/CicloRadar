@@ -31,6 +31,6 @@ Android: `flutter build apk --release`. iOS: `flutter build ipa --release` desde
 
 ## Funcionalidad y límites
 
-La app incluye mapas raster, GPS con ubicación de respaldo, capas de mapa, datos de comunidad de ejemplo, privacidad local, perfil y contactos SOS guardados en el dispositivo. Las alarmas se sintetizan localmente; vibración y bloqueo de pantalla dependen de la plataforma.
+La app inicia con un registro local de tres pasos (teléfono, código de demostración y perfil ciclista) y continúa al mapa. Incluye mapas raster, GPS con ubicación de respaldo, datos de comunidad de ejemplo, privacidad local, perfil y contactos SOS guardados en el dispositivo. Las alarmas se sintetizan localmente; vibración y bloqueo de pantalla dependen de la plataforma.
 
-**Prototipo solamente:** la comunidad no se conecta a otros usuarios y las alertas SOS no se envían a servidores ni a contactos. No usar como sistema de emergencia real. El nivel de volumen también depende del dispositivo.
+**Prototipo solamente:** el código de registro no se envía por SMS ni se valida con un servicio; solo sirve para avanzar el flujo de demostración. La comunidad no se conecta a otros usuarios y las alertas SOS no se envían a servidores ni a contactos. No usar como sistema de emergencia real. El nivel de volumen también depende del dispositivo.

@@ -15,6 +15,11 @@ class AppState extends ChangeNotifier {
   String _userName = 'Alejandro';
   String _userInitials = 'AL';
   String _bikeModel = 'Cannondale Topstone Gravel';
+  String _phoneNumber = '';
+  String _bikeType = 'MTB';
+  String _experienceLevel = 'Intermedio';
+  bool _isRegistered = false;
+  bool _isReady = false;
   List<SosContact> _emergencyContacts = [];
   String _emergencyMessage = '¡Emergencia ciclista! Necesito asistencia en mi ubicación GPS.';
 
@@ -53,6 +58,11 @@ class AppState extends ChangeNotifier {
   String get userName => _userName;
   String get userInitials => _userInitials;
   String get bikeModel => _bikeModel;
+  String get phoneNumber => _phoneNumber;
+  String get bikeType => _bikeType;
+  String get experienceLevel => _experienceLevel;
+  bool get isRegistered => _isRegistered;
+  bool get isReady => _isReady;
   List<SosContact> get emergencyContacts => List.unmodifiable(_emergencyContacts);
   String get emergencyContact =>
       _emergencyContacts.isEmpty ? 'Sin configurar' : _emergencyContacts.first.phone;
@@ -75,11 +85,14 @@ class AppState extends ChangeNotifier {
     _initApp();
   }
 
-  AppState.forTesting();
+  AppState.forTesting() : _isReady = true;
 
   Future<void> _initApp() async {
     final preferences = await SharedPreferences.getInstance();
     _loadPreferences(preferences);
+    _isReady = true;
+    notifyListeners();
+
     await _audioService.init();
     await refreshLocation();
     _corridors = CommunityData.getSampleCorridors(_userLocation);
@@ -97,6 +110,10 @@ class AppState extends ChangeNotifier {
     _userName = preferences.getString('profile.name') ?? _userName;
     _userInitials = _initialsFor(_userName);
     _bikeModel = preferences.getString('profile.bikeModel') ?? _bikeModel;
+    _phoneNumber = preferences.getString('profile.phone') ?? _phoneNumber;
+    _bikeType = preferences.getString('profile.bikeType') ?? _bikeType;
+    _experienceLevel = preferences.getString('profile.experienceLevel') ?? _experienceLevel;
+    _isRegistered = preferences.getBool('profile.isRegistered') ?? false;
     _trackingEnabled = preferences.getBool('privacy.trackingEnabled') ?? _trackingEnabled;
     _heatmapEnabled = preferences.getBool('map.heatmapEnabled') ?? _heatmapEnabled;
 
@@ -132,6 +149,37 @@ class AppState extends ChangeNotifier {
 
     _emergencyMessage =
         preferences.getString('sos.message') ?? _emergencyMessage;
+  }
+
+  Future<void> completeRegistration({
+    required String phone,
+    required String name,
+    required String bikeType,
+    required String experienceLevel,
+  }) async {
+    final trimmedName = name.trim();
+    final trimmedPhone = phone.trim();
+    final preferences = await SharedPreferences.getInstance();
+    final results = await Future.wait([
+      preferences.setString('profile.phone', trimmedPhone),
+      preferences.setString('profile.name', trimmedName),
+      preferences.setString('profile.bikeType', bikeType),
+      preferences.setString('profile.experienceLevel', experienceLevel),
+      preferences.setString('profile.bikeModel', bikeType),
+      preferences.setBool('profile.isRegistered', true),
+    ]);
+    if (results.any((saved) => !saved)) {
+      throw StateError('El almacenamiento local rechazó uno o más datos del perfil.');
+    }
+
+    _phoneNumber = trimmedPhone;
+    _userName = trimmedName;
+    _userInitials = _initialsFor(trimmedName);
+    _bikeType = bikeType;
+    _experienceLevel = experienceLevel;
+    _bikeModel = bikeType;
+    _isRegistered = true;
+    notifyListeners();
   }
 
   String _initialsFor(String name) {

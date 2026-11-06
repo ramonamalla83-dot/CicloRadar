@@ -4,9 +4,9 @@ Aplicación multiplataforma Flutter para ciclistas. Android, iOS y Web comparten
 
 ## Estado actual
 
-La app incluye un mapa con capas raster, ubicación GPS, corredores y ciclistas de ejemplo, modo sigilo, preferencias locales, contactos SOS configurables y una alarma local con cuenta regresiva.
+La app comienza con un registro local de tres pasos (teléfono, código de demostración y perfil ciclista), seguido del mapa. También incluye capas raster, ubicación GPS, corredores y ciclistas de ejemplo, modo sigilo, preferencias locales, contactos SOS configurables y una alarma local con cuenta regresiva.
 
-**Es un prototipo, no un servicio de emergencia.** La comunidad y las alertas son simuladas: no hay backend, transmisión de ubicación ni envío de SMS a los contactos. La ubicación de respaldo es Madrid. El volumen final depende del dispositivo y del sistema operativo.
+**Es un prototipo, no un servicio de emergencia.** El registro no envía ni verifica SMS; el perfil solo se guarda en el dispositivo. La comunidad y las alertas también son simuladas: no hay backend, transmisión de ubicación ni envío de SMS a los contactos. La ubicación de respaldo es Madrid. El volumen final depende del dispositivo y del sistema operativo.
 
 ## Requisitos
 

@@ -21,6 +21,7 @@ La app usa Flutter/Dart, `provider`, `flutter_map`, `geolocator`, `audioplayers`
 - El modo sigilo debe indicar claramente que la ubicación no se comparte.
 - No usar diálogos bloqueantes del sistema (`alert`/`confirm`); preferir componentes Flutter.
 - No presentar datos simulados como ciclistas conectados ni el SOS local como una alerta transmitida. La app aún no tiene backend ni envío de SMS.
+- El registro de tres pasos es solo local: no afirmar que se envió o validó un código SMS. La finalización del registro debe guardar el perfil en el dispositivo y abrir el mapa en próximos inicios.
 - Tipar código Dart y manejar errores de permisos y plugins de forma explícita.
 
 ## Validación

@@ -23,7 +23,7 @@ class AppState extends ChangeNotifier {
   List<SosContact> _emergencyContacts = [];
   String _emergencyMessage = '¡Emergencia ciclista! Necesito asistencia en mi ubicación GPS.';
 
-  // Pantalla activa (0: Mapa, 1: Comunidad, 2: Contactos SOS, 3: Perfil)
+  // Pantalla activa (0: Inicio, 1: Mapa, 2: Comunidad, 3: Contactos SOS, 4: Perfil)
   int _currentScreenIndex = 0;
 
   // Ubicación del usuario

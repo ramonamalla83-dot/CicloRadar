@@ -1,5 +1,6 @@
 import 'package:cicloradar/providers/app_state.dart';
 import 'package:cicloradar/main.dart';
+import 'package:cicloradar/screens/home_screen.dart';
 import 'package:cicloradar/screens/registration_screen.dart';
 import 'package:cicloradar/screens/sos_contacts_screen.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +24,38 @@ void main() {
 
     expect(find.text('Tu número'), findsOneWidget);
     expect(find.text('Radar Mapa'), findsNothing);
+  });
+
+  testWidgets('home dashboard shows clearly marked example activity',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final appState = AppState.forTesting();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: appState,
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.text('Kilómetros recorridos'), findsOneWidget);
+    expect(find.text('75,5'), findsOneWidget);
+    expect(find.text('4 h 32 min'), findsOneWidget);
+    expect(find.text('Rutas guardadas'), findsOneWidget);
+    expect(find.textContaining('Vista de ejemplo.'), findsOneWidget);
+    expect(find.byType(CustomPaint), findsWidgets);
+
+    final mapButton = find.text('Abrir radar del mapa');
+    await tester.scrollUntilVisible(
+      mapButton,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(mapButton);
+    await tester.pumpAndSettle();
+    expect(appState.currentScreenIndex, 1);
   });
 
   testWidgets('registration saves the rider profile after the demo code step',

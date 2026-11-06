@@ -6,7 +6,7 @@ CicloRadar se mantiene como una sola aplicación Flutter en `flutter_app/`, comp
 
 - `flutter_app/lib/main.dart`: tema, raíz de la app y proveedores.
 - `flutter_app/lib/providers/app_state.dart`: estado global, GPS, privacidad, mapa, perfil, preferencias y flujo SOS.
-- `flutter_app/lib/screens/`: mapa, comunidad, contactos SOS, perfil y diálogo de emergencia.
+- `flutter_app/lib/screens/`: inicio, mapa, comunidad, contactos SOS, perfil y diálogo de emergencia.
 - `flutter_app/lib/services/`: ubicación y alarma/vibración del dispositivo.
 - `flutter_app/web/`: configuración de la compilación web de Flutter.
 
@@ -21,7 +21,8 @@ La app usa Flutter/Dart, `provider`, `flutter_map`, `geolocator`, `audioplayers`
 - El modo sigilo debe indicar claramente que la ubicación no se comparte.
 - No usar diálogos bloqueantes del sistema (`alert`/`confirm`); preferir componentes Flutter.
 - No presentar datos simulados como ciclistas conectados ni el SOS local como una alerta transmitida. La app aún no tiene backend ni envío de SMS.
-- El registro de tres pasos es solo local: no afirmar que se envió o validó un código SMS. La finalización del registro debe guardar el perfil en el dispositivo y abrir el mapa en próximos inicios.
+- El registro de tres pasos es solo local: no afirmar que se envió o validó un código SMS. La finalización del registro guarda el perfil en el dispositivo; la app abre Inicio al finalizar.
+- Las métricas, recorridos y rutas que muestra el dashboard de Inicio son datos de ejemplo mientras no exista registro de trayectos.
 - Tipar código Dart y manejar errores de permisos y plugins de forma explícita.
 
 ## Validación

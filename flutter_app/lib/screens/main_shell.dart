@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import 'community_screen.dart';
+import 'home_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
 import 'sos_contacts_screen.dart';
@@ -15,6 +16,7 @@ class MainShell extends StatelessWidget {
     final appState = context.watch<AppState>();
 
     final screens = [
+      const HomeScreen(),
       const MapScreen(),
       const CommunityScreen(),
       const SosContactsScreen(),
@@ -50,9 +52,14 @@ class MainShell extends StatelessWidget {
           elevation: 0,
           items: const [
             BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'Inicio',
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.map_outlined),
               activeIcon: Icon(Icons.map),
-              label: 'Radar Mapa',
+              label: 'Mapa',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.group_outlined),

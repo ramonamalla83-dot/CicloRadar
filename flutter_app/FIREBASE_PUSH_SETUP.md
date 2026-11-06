@@ -40,6 +40,13 @@ La app ya tiene el cliente Flutter FCM, la recepción en segundo plano para Web 
 5. Compila desde `flutter_app` con `flutter build web --dart-define-from-file=firebase_options.json`. Para Android/iOS, añade el mismo argumento a `flutter run` o a la compilación correspondiente. iOS también requiere la capacidad Push Notifications/APNs y perfil de aprovisionamiento configurado en Xcode.
 6. Despliega el backend y autoriza el dominio Web en Firebase Authentication. Revisa el plan de facturación y cuotas de Cloud Functions antes de publicar. Web Push requiere HTTPS y un navegador compatible (localhost sirve para desarrollo); en iOS Web el soporte depende de la versión y de instalar la PWA.
 
+## Hitos comunitarios en el mapa
+
+1. Crea la base de datos Cloud Firestore en el proyecto Firebase. La app usa autenticación anónima para identificar el dispositivo; puede inicializar Firebase Core para Firestore aunque FCM/Web Push no esté configurado.
+2. Desde `flutter_app`, despliega `firestore.rules` con Firebase CLI (`firebase deploy --only firestore:rules`) o publícalas desde Firebase Console. Las lecturas de `safetyReports` son públicas porque contienen únicamente categoría, coordenadas y fechas; las escrituras exigen autenticación y están limitadas a las categorías permitidas y a 24 horas de vigencia.
+3. En Firebase Console, habilita la aplicación en App Check para Firestore. Antes de producción, usa una Cloud Function callable con límites de frecuencia y moderación antispam; las reglas de Firestore no limitan cuántos reportes puede crear una cuenta autenticada.
+4. Configura la política TTL de Firestore sobre `safetyReports.expiresAt`. El mapa filtra los vencidos al recibir actualizaciones y cada minuto en primer plano; la eliminación TTL del documento puede no ser inmediata.
+
 **Verificación necesaria para SOS Grupal:** el teléfono que se escribe en el registro actual es de demostración y no se verifica. Antes de habilitar envíos grupales, integra Firebase Phone Auth (o un mecanismo equivalente) para que cada destinatario tenga un teléfono E.164 verificado asociado a su UID. La Cloud Function nunca debe confiar en el teléfono local del registro ni exponer la ubicación a cuentas no verificadas o sin consentimiento.
 
 ## Contrato de Cloud Functions callable

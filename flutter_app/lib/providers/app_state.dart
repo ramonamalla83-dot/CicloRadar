@@ -10,8 +10,11 @@ import '../models/map_layer.dart';
 import '../models/sos_contact.dart';
 import '../services/advanced_night_mode_service.dart';
 import '../services/audio_alarm_service.dart';
+import '../services/firebase_config.dart';
 import '../services/location_service.dart';
+import '../services/safety_report_service.dart';
 import '../services/sos_push_service.dart';
+import '../models/safety_report.dart';
 
 class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // Perfil del ciclista
@@ -67,6 +70,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // Ciclistas de la comunidad y corredores
   List<Cyclist> _communityCyclists = [];
   List<HeatmapCorridor> _corridors = [];
+  List<SafetyReport> _safetyReports = [];
+  String? _safetyReportsStatus =
+      'Reportes comunitarios disponibles al configurar Firebase.';
+  StreamSubscription<List<SafetyReport>>? _safetyReportsSubscription;
+  Timer? _safetyReportExpiryTimer;
+  SafetyReportRepository? _safetyReportRepository;
 
   late final AudioAlarmService _audioService = AudioAlarmService();
   final LocationService _locationService = LocationService();
@@ -113,6 +122,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Cyclist? get incomingEmergency => _incomingEmergency;
   List<Cyclist> get communityCyclists => _communityCyclists;
   List<HeatmapCorridor> get corridors => _corridors;
+  List<SafetyReport> get safetyReports => List.unmodifiable(_safetyReports);
+  String? get safetyReportsStatus => _safetyReportsStatus;
+  bool get safetyReportsAvailable => _safetyReportRepository != null;
 
   AppState() {
     _localClock = DateTime.now;
@@ -155,6 +167,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       _sosPushStatus = error.message;
       notifyListeners();
     }
+    _startSafetyReportUpdates();
 
     await refreshLocation();
     _corridors = CommunityData.getSampleCorridors(_userLocation);
@@ -174,6 +187,67 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (_sosAlertNotificationsEnabled && _sosPushService.isInitialized) {
       _startPresenceUpdates();
     }
+  }
+
+  void _startSafetyReportUpdates() {
+    if (!FirebaseConfig.isCoreConfigured) {
+      _safetyReportsStatus =
+          'Reportes comunitarios en tiempo real pendientes de configurar Firebase.';
+      return;
+    }
+    if (!_sosPushService.isFirebaseInitialized) {
+      _safetyReportsStatus =
+          'Reportes comunitarios no disponibles: Firebase no se inicializó.';
+      return;
+    }
+
+    final repository = FirestoreSafetyReportService();
+    _safetyReportRepository = repository;
+    _safetyReportsStatus = 'Conectando con reportes comunitarios...';
+    _safetyReportsSubscription = repository.watchActiveReports().listen(
+      (reports) {
+        _safetyReports = reports
+            .where((report) => report.isActiveAt(DateTime.now()))
+            .toList(growable: false);
+        _safetyReportsStatus = null;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        _safetyReportsStatus =
+            'No se pudieron cargar los reportes comunitarios: $error';
+        notifyListeners();
+      },
+    );
+    _safetyReportExpiryTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) {
+        final activeReports = _safetyReports
+            .where((report) => report.isActiveAt(DateTime.now()))
+            .toList(growable: false);
+        if (activeReports.length != _safetyReports.length) {
+          _safetyReports = activeReports;
+          notifyListeners();
+        }
+      },
+    );
+  }
+
+  Future<void> createSafetyReport({
+    required SafetyHazardType type,
+    required LatLng position,
+  }) async {
+    final repository = _safetyReportRepository;
+    if (repository == null) {
+      throw SafetyReportException(
+        _safetyReportsStatus ??
+            'El servicio de reportes comunitarios no está disponible.',
+      );
+    }
+
+    await repository.createReport(type: type, position: position);
+    _safetyReportsStatus =
+        'Reporte de ${type.label.toLowerCase()} compartido con la comunidad por 24 horas.';
+    notifyListeners();
   }
 
   void _loadPreferences(SharedPreferences preferences) {
@@ -776,6 +850,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
     _nightModeTimer?.cancel();
+    _safetyReportExpiryTimer?.cancel();
+    unawaited(_safetyReportsSubscription?.cancel());
     _presenceTimer?.cancel();
     _locationService.stopTracking();
     _audioService.dispose();

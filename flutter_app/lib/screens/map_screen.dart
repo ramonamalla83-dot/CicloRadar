@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../models/cyclist.dart';
 import '../models/map_layer.dart';
+import '../models/safety_report.dart';
 import '../providers/app_state.dart';
+import '../services/safety_report_service.dart';
 import '../widgets/advanced_night_mode_filter.dart';
 import '../widgets/weather_map_widget.dart';
 
@@ -18,6 +22,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   String? _lastCenteredEmergencyId;
+  SafetyHazardType? _pendingSafetyReportType;
 
   void _recenterMap(LatLng target) {
     _mapController.move(target, 15.0);
@@ -32,8 +37,7 @@ class _MapScreenState extends State<MapScreen> {
         incomingEmergency.id != _lastCenteredEmergencyId) {
       _lastCenteredEmergencyId = incomingEmergency.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            appState.incomingEmergency?.id == incomingEmergency.id) {
+        if (mounted && appState.incomingEmergency?.id == incomingEmergency.id) {
           _recenterMap(incomingEmergency.position);
         }
       });
@@ -49,6 +53,11 @@ class _MapScreenState extends State<MapScreen> {
             initialZoom: 15.0,
             minZoom: 4.0,
             maxZoom: 19.0,
+            onTap: (_, point) {
+              if (_pendingSafetyReportType != null) {
+                unawaited(_placeSafetyReport(point));
+              }
+            },
           ),
           children: [
             // Capa ráster activa (Calles día, Carto dark noche, Google Satélite, Google Relieve)
@@ -158,6 +167,32 @@ class _MapScreenState extends State<MapScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                ...appState.safetyReports.map((report) {
+                  return Marker(
+                    point: report.position,
+                    width: 46,
+                    height: 46,
+                    child: GestureDetector(
+                      onTap: () => _showSafetyReportDetails(context, report),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF18181B),
+                          shape: BoxShape.circle,
+                          border:
+                              Border.all(color: report.type.color, width: 2),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black54, blurRadius: 6),
+                          ],
+                        ),
+                        child: Icon(
+                          report.type.icon,
+                          color: report.type.color,
+                          size: 23,
                         ),
                       ),
                     ),
@@ -315,6 +350,90 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ),
 
+        Positioned(
+          left: 16,
+          bottom: 112,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.53,
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xF209090B),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Text(
+                  appState.safetyReportsStatus ??
+                      '${appState.safetyReports.length} reportes activos · en vivo',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: appState.safetyReportsAvailable
+                        ? Colors.white70
+                        : Colors.amber.shade300,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              AdvancedNightModeFilter(
+                enabled: appState.advancedNightModeEnabled,
+                child: FloatingActionButton.extended(
+                  heroTag: 'fab_safety_report',
+                  onPressed: _beginSafetyReport,
+                  backgroundColor: const Color(0xFF18181B),
+                  foregroundColor: Colors.white,
+                  icon: const Icon(Icons.add_alert_outlined),
+                  label: const Text('Reportar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        if (_pendingSafetyReportType != null)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 122,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF18181B),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _pendingSafetyReportType!.color),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _pendingSafetyReportType!.icon,
+                    color: _pendingSafetyReportType!.color,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Toca el punto exacto del mapa para reportar: '
+                      '${_pendingSafetyReportType!.label}.',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cancelar reporte',
+                    onPressed: () =>
+                        setState(() => _pendingSafetyReportType = null),
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
         // 4. ALERTA COMUNITARIA ENTRANTE (POPUP OVERLAY)
         if (appState.incomingEmergency != null) ...[
           Positioned(
@@ -370,6 +489,126 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Future<void> _beginSafetyReport() async {
+    final appState = context.read<AppState>();
+    if (!appState.safetyReportsAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            appState.safetyReportsStatus ??
+                'Los reportes comunitarios requieren Firebase configurado.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final type = await showModalBottomSheet<SafetyHazardType>(
+      context: context,
+      backgroundColor: const Color(0xFF18181B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '¿Qué peligro quieres señalar?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ...SafetyHazardType.values.map(
+                (type) => ListTile(
+                  minLeadingWidth: 32,
+                  leading: Icon(type.icon, color: type.color),
+                  title: Text(type.label),
+                  onTap: () => Navigator.pop(context, type),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'El punto y el tipo del peligro serán visibles públicamente '
+                'durante 24 horas.',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || type == null) return;
+    setState(() => _pendingSafetyReportType = type);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Toca el punto exacto en el mapa.')),
+    );
+  }
+
+  Future<void> _placeSafetyReport(LatLng position) async {
+    final type = _pendingSafetyReportType;
+    if (type == null) return;
+    setState(() => _pendingSafetyReportType = null);
+
+    try {
+      await context.read<AppState>().createSafetyReport(
+            type: type,
+            position: position,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Reporte de ${type.label.toLowerCase()} compartido por 24 horas.',
+          ),
+        ),
+      );
+    } on SafetyReportException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    }
+  }
+
+  void _showSafetyReportDetails(BuildContext context, SafetyReport report) {
+    final remaining = report.expiresAt.difference(DateTime.now());
+    final remainingLabel = remaining.inHours > 0
+        ? '${remaining.inHours} h restantes'
+        : '${remaining.inMinutes.clamp(1, 59)} min restantes';
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF18181B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(20),
+          leading: Icon(report.type.icon, color: report.type.color, size: 32),
+          title: Text(
+            report.type.label,
+            style: const TextStyle(color: Colors.white),
+          ),
+          subtitle: Text(
+            'Ubicación reportada por la comunidad · $remainingLabel\n'
+            '${report.position.latitude.toStringAsFixed(5)}, '
+            '${report.position.longitude.toStringAsFixed(5)}',
+            style: TextStyle(color: Colors.grey.shade400),
+          ),
+        ),
+      ),
     );
   }
 

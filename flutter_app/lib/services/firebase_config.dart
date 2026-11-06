@@ -42,21 +42,25 @@ class FirebaseConfig {
   }
 
   static bool get isConfigured {
-    final needsIosBundleId =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-    return _apiKey.isNotEmpty &&
-        projectId.isNotEmpty &&
-        messagingSenderId.isNotEmpty &&
-        _appId.isNotEmpty &&
-        (!needsIosBundleId || iosBundleId.isNotEmpty) &&
+    return isCoreConfigured &&
         (!kIsWeb ||
             (webAuthDomain.isNotEmpty &&
                 webVapidKey.isNotEmpty &&
                 (kDebugMode || webAppCheckSiteKey.isNotEmpty)));
   }
 
+  static bool get isCoreConfigured {
+    final needsIosBundleId =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    return _apiKey.isNotEmpty &&
+        projectId.isNotEmpty &&
+        messagingSenderId.isNotEmpty &&
+        _appId.isNotEmpty &&
+        (!needsIosBundleId || iosBundleId.isNotEmpty);
+  }
+
   static FirebaseOptions get currentPlatform {
-    if (!isConfigured) {
+    if (!isCoreConfigured) {
       throw StateError('Faltan los valores de configuración de Firebase.');
     }
 
@@ -65,7 +69,7 @@ class FirebaseConfig {
       appId: _appId,
       messagingSenderId: messagingSenderId,
       projectId: projectId,
-      authDomain: kIsWeb ? webAuthDomain : null,
+      authDomain: kIsWeb && webAuthDomain.isNotEmpty ? webAuthDomain : null,
       iosBundleId: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
           ? iosBundleId
           : null,

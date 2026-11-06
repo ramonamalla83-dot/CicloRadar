@@ -40,13 +40,15 @@ class SosPushService {
 
   bool get isConfigured => FirebaseConfig.isConfigured;
   bool get isInitialized => _messaging != null;
+  bool get isFirebaseInitialized =>
+      Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null;
   String? get currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
   Future<void> initialize({
     required void Function(RemoteMessage) onIncomingSos,
     required void Function(String) onError,
   }) async {
-    if (!isConfigured) return;
+    if (!FirebaseConfig.isCoreConfigured) return;
     _onError = onError;
 
     try {
@@ -54,24 +56,30 @@ class SosPushService {
         await Firebase.initializeApp(options: FirebaseConfig.currentPlatform);
       }
 
-      await FirebaseAppCheck.instance.activate(
-        providerWeb: kIsWeb
-            ? (kDebugMode
-                ? WebDebugProvider()
-                : ReCaptchaV3Provider(FirebaseConfig.webAppCheckSiteKey))
-            : null,
-        providerAndroid: kDebugMode
-            ? const AndroidDebugProvider()
-            : const AndroidPlayIntegrityProvider(),
-        providerApple: kDebugMode
-            ? const AppleDebugProvider()
-            : const AppleDeviceCheckProvider(),
-      );
+      if (kDebugMode ||
+          !kIsWeb ||
+          FirebaseConfig.webAppCheckSiteKey.isNotEmpty) {
+        await FirebaseAppCheck.instance.activate(
+          providerWeb: kIsWeb
+              ? (kDebugMode
+                  ? WebDebugProvider()
+                  : ReCaptchaV3Provider(FirebaseConfig.webAppCheckSiteKey))
+              : null,
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          providerApple: kDebugMode
+              ? const AppleDebugProvider()
+              : const AppleDeviceCheckProvider(),
+        );
+      }
 
       final auth = FirebaseAuth.instance;
       if (auth.currentUser == null) {
         await auth.signInAnonymously();
       }
+
+      if (!isConfigured) return;
 
       _functions = FirebaseFunctions.instanceFor(
         region: FirebaseConfig.functionsRegion,

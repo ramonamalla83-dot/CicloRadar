@@ -91,7 +91,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           const Text(
-            'Emitiendo Alerta de Emergencia',
+            'Activando alarma local de prueba',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 18,
@@ -101,7 +101,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Se activará la sirena acústica forzada al 100% y se notificará a todos los ciclistas en tu radio de radar.',
+            'Se reproducirá una alarma local en este dispositivo. Esta versión no envía alertas ni comparte tu ubicación.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -171,7 +171,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            '¡SOS ACTIVO EN RUTA!',
+            'ALARMA LOCAL ACTIVA',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 22,
@@ -182,7 +182,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Sirena sonando a volumen máximo. Tu posición GPS y datos de tu bicicleta han sido transmitidos a la comunidad.',
+            'El sonido se reproduce en este dispositivo. No se enviaron notificaciones ni datos a la comunidad.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,

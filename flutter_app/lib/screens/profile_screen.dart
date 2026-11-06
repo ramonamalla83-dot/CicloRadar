@@ -6,6 +6,63 @@ import '../providers/app_state.dart';
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
+  Future<void> _editProfile(BuildContext context, AppState appState) async {
+    final nameController = TextEditingController(text: appState.userName);
+    final bikeController = TextEditingController(text: appState.bikeModel);
+    final formKey = GlobalKey<FormState>();
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Editar perfil'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Ingresa tu nombre.'
+                    : null,
+              ),
+              TextFormField(
+                controller: bikeController,
+                decoration: const InputDecoration(labelText: 'Bicicleta'),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Ingresa el modelo de tu bicicleta.'
+                    : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(dialogContext, true);
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSave == true) {
+      appState.updateProfile(
+        name: nameController.text,
+        bikeModel: bikeController.text,
+      );
+    }
+    nameController.dispose();
+    bikeController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -71,6 +128,11 @@ class ProfileScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Editar perfil',
+                  onPressed: () => _editProfile(context, appState),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
               ],
             ),
           ),
@@ -115,7 +177,7 @@ class ProfileScreen extends StatelessWidget {
                       ),
                       Text(
                         appState.trackingEnabled
-                            ? 'Tu posición se comparte con otros ciclistas'
+                            ? 'Visibilidad habilitada; la comunidad es de ejemplo por ahora'
                             : 'Modo Sigilo activo (Navegas de incógnito)',
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
@@ -139,7 +201,7 @@ class ProfileScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Tono de Alarma del Sistema (Auto-Boost)',
+                'Tono de alarma SOS',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -153,7 +215,7 @@ class ProfileScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
-                  '100% VOLUMEN',
+                  'AUDIO AL 100%',
                   style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -161,7 +223,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'En caso de emergencia SOS, la app fuerza el volumen acústico al nivel máximo para alertar a tu entorno.',
+            'En caso de emergencia, la app reproduce la alarma al máximo nivel del reproductor. El volumen físico depende del dispositivo.',
             style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
           ),
           const SizedBox(height: 14),
@@ -234,10 +296,10 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildPermissionRow('GPS de Alta Precisión', 'Activo (Rastreo cada 5m)', Icons.gps_fixed, true),
-                _buildPermissionRow('Bloqueo de Suspensión (WakeLock)', 'Activo en Ruta', Icons.screen_lock_portrait, true),
-                _buildPermissionRow('Vibración Háptica de Emergencia', 'Habilitada', Icons.vibration, true),
-                _buildPermissionRow('Maximizador de Volumen Acústico', 'Boost Dinámico', Icons.volume_up, true),
+                _buildPermissionRow('GPS', 'Madrid si falta permiso o señal', Icons.gps_fixed, false),
+                _buildPermissionRow('Wake Lock', 'Se intenta durante la alarma', Icons.screen_lock_portrait, false),
+                _buildPermissionRow('Vibración', 'Solo en equipos compatibles', Icons.vibration, false),
+                _buildPermissionRow('Audio SOS', 'No controla el volumen físico', Icons.volume_up, false),
               ],
             ),
           ),

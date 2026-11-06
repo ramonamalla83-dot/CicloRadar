@@ -111,7 +111,7 @@ class CommunityScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Prueba la sirena y auto-boost de volumen ante una alerta cercana.',
+                        'Prueba la alarma local. No se contacta a otros ciclistas.',
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
                     ],
@@ -151,7 +151,7 @@ class CommunityScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${appState.communityCyclists.length} Activos',
+                  '${appState.communityCyclists.length} de ejemplo',
                   style: const TextStyle(color: Color(0xFFF97316), fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),

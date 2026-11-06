@@ -181,7 +181,7 @@ class _MapScreenState extends State<MapScreen> {
                       const SizedBox(width: 8),
                       Text(
                         appState.trackingEnabled
-                            ? '${appState.communityCyclists.length} ciclistas activos'
+                            ? '${appState.communityCyclists.length} ciclistas de ejemplo'
                             : 'Modo Sigilo (Invisible)',
                         style: const TextStyle(
                           color: Colors.white,

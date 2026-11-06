@@ -4,6 +4,7 @@ import '../providers/app_state.dart';
 import 'community_screen.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
+import 'sos_contacts_screen.dart';
 import 'sos_dialog.dart';
 
 class MainShell extends StatelessWidget {
@@ -16,6 +17,7 @@ class MainShell extends StatelessWidget {
     final screens = [
       const MapScreen(),
       const CommunityScreen(),
+      const SosContactsScreen(),
       const ProfileScreen(),
     ];
 
@@ -23,11 +25,7 @@ class MainShell extends StatelessWidget {
       backgroundColor: const Color(0xFF09090B), // zinc-950
       body: Stack(
         children: [
-          // Pantalla activa indexada
-          IndexedStack(
-            index: appState.currentScreenIndex == 3 ? 2 : (appState.currentScreenIndex > 2 ? 0 : appState.currentScreenIndex),
-            children: screens,
-          ),
+          IndexedStack(index: appState.currentScreenIndex, children: screens),
 
           // Overlay modal de cuenta regresiva SOS de 5 segundos
           const SosDialog(),
@@ -41,14 +39,8 @@ class MainShell extends StatelessWidget {
           ),
         ),
         child: BottomNavigationBar(
-          currentIndex: appState.currentScreenIndex == 3 ? 2 : (appState.currentScreenIndex > 2 ? 0 : appState.currentScreenIndex),
-          onTap: (index) {
-            if (index == 2) {
-              appState.setScreenIndex(3); // Perfil
-            } else {
-              appState.setScreenIndex(index);
-            }
-          },
+          currentIndex: appState.currentScreenIndex,
+          onTap: appState.setScreenIndex,
           backgroundColor: const Color(0xFF09090B),
           selectedItemColor: const Color(0xFFF97316), // orange-500
           unselectedItemColor: Colors.grey.shade500,
@@ -68,9 +60,14 @@ class MainShell extends StatelessWidget {
               label: 'Comunidad',
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.sos_outlined),
+              activeIcon: Icon(Icons.sos),
+              label: 'Contactos SOS',
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
               activeIcon: Icon(Icons.person),
-              label: 'Ajustes',
+              label: 'Perfil',
             ),
           ],
         ),

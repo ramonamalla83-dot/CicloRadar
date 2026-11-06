@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/alarm_preset.dart';
 import '../models/cyclist.dart';
 import '../models/map_layer.dart';
+import '../models/sos_contact.dart';
 import '../services/audio_alarm_service.dart';
 import '../services/location_service.dart';
 
@@ -12,10 +15,10 @@ class AppState extends ChangeNotifier {
   String _userName = 'Alejandro';
   String _userInitials = 'AL';
   String _bikeModel = 'Cannondale Topstone Gravel';
-  String _emergencyContact = '+34 612 345 678';
+  List<SosContact> _emergencyContacts = [];
   String _emergencyMessage = '¡Emergencia ciclista! Necesito asistencia en mi ubicación GPS.';
 
-  // Pantalla activa (0: Mapa, 1: Comunidad, 2: SOS, 3: Perfil)
+  // Pantalla activa (0: Mapa, 1: Comunidad, 2: Contactos SOS, 3: Perfil)
   int _currentScreenIndex = 0;
 
   // Ubicación del usuario
@@ -50,7 +53,9 @@ class AppState extends ChangeNotifier {
   String get userName => _userName;
   String get userInitials => _userInitials;
   String get bikeModel => _bikeModel;
-  String get emergencyContact => _emergencyContact;
+  List<SosContact> get emergencyContacts => List.unmodifiable(_emergencyContacts);
+  String get emergencyContact =>
+      _emergencyContacts.isEmpty ? 'Sin configurar' : _emergencyContacts.first.phone;
   String get emergencyMessage => _emergencyMessage;
   int get currentScreenIndex => _currentScreenIndex;
   LatLng get userLocation => _userLocation;
@@ -70,7 +75,11 @@ class AppState extends ChangeNotifier {
     _initApp();
   }
 
+  AppState.forTesting();
+
   Future<void> _initApp() async {
+    final preferences = await SharedPreferences.getInstance();
+    _loadPreferences(preferences);
     await _audioService.init();
     await refreshLocation();
     _corridors = CommunityData.getSampleCorridors(_userLocation);
@@ -82,6 +91,66 @@ class AppState extends ChangeNotifier {
       _userLocation = newPos;
       notifyListeners();
     });
+  }
+
+  void _loadPreferences(SharedPreferences preferences) {
+    _userName = preferences.getString('profile.name') ?? _userName;
+    _userInitials = _initialsFor(_userName);
+    _bikeModel = preferences.getString('profile.bikeModel') ?? _bikeModel;
+    _trackingEnabled = preferences.getBool('privacy.trackingEnabled') ?? _trackingEnabled;
+    _heatmapEnabled = preferences.getBool('map.heatmapEnabled') ?? _heatmapEnabled;
+
+    final layerName = preferences.getString('map.activeLayer');
+    if (layerName != null) {
+      _activeLayer = MapLayerType.values.firstWhere(
+        (layer) => layer.name == layerName,
+        orElse: () => MapLayerType.streets,
+      );
+    }
+
+    final alarmName = preferences.getString('sos.activeAlarm');
+    if (alarmName != null) {
+      _activeAlarm = AlarmPreset.values.firstWhere(
+        (preset) => preset.name == alarmName,
+        orElse: () => AlarmPreset.radarIos,
+      );
+    }
+
+    final contactsJson = preferences.getString('sos.contacts');
+    if (contactsJson != null) {
+      final decoded = jsonDecode(contactsJson);
+      if (decoded is! List) {
+        throw const FormatException('La lista de contactos SOS guardada no es válida.');
+      }
+      _emergencyContacts = decoded.map((entry) {
+        if (entry is! Map<String, dynamic>) {
+          throw const FormatException('Contacto SOS guardado con formato inválido.');
+        }
+        return SosContact.fromJson(entry);
+      }).toList();
+    }
+
+    _emergencyMessage =
+        preferences.getString('sos.message') ?? _emergencyMessage;
+  }
+
+  String _initialsFor(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+    final words = parts.toList();
+    if (words.isEmpty) return 'U';
+    if (words.length > 1) {
+      return '${words.first[0]}${words[1][0]}'.toUpperCase();
+    }
+    return words.first.substring(0, words.first.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  void _savePreference(Future<bool> Function(SharedPreferences) save) {
+    unawaited(() async {
+      final preferences = await SharedPreferences.getInstance();
+      if (!await save(preferences)) {
+        throw StateError('No se pudo guardar la preferencia de CicloRadar.');
+      }
+    }());
   }
 
   Future<void> refreshLocation() async {
@@ -102,21 +171,27 @@ class AppState extends ChangeNotifier {
 
   void setMapLayer(MapLayerType layer) {
     _activeLayer = layer;
+    _savePreference((preferences) => preferences.setString('map.activeLayer', layer.name));
     notifyListeners();
   }
 
   void toggleHeatmap() {
     _heatmapEnabled = !_heatmapEnabled;
+    _savePreference((preferences) =>
+        preferences.setBool('map.heatmapEnabled', _heatmapEnabled));
     notifyListeners();
   }
 
   void toggleTracking() {
     _trackingEnabled = !_trackingEnabled;
+    _savePreference((preferences) =>
+        preferences.setBool('privacy.trackingEnabled', _trackingEnabled));
     notifyListeners();
   }
 
   void setActiveAlarm(AlarmPreset preset) {
     _activeAlarm = preset;
+    _savePreference((preferences) => preferences.setString('sos.activeAlarm', preset.name));
     notifyListeners();
   }
 
@@ -131,18 +206,51 @@ class AppState extends ChangeNotifier {
     String? message,
   }) {
     if (name != null && name.isNotEmpty) {
-      _userName = name;
-      final parts = name.trim().split(' ');
-      if (parts.length >= 2) {
-        _userInitials = '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-      } else {
-        _userInitials = name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
-      }
+      _userName = name.trim();
+      _userInitials = _initialsFor(_userName);
+      _savePreference((preferences) => preferences.setString('profile.name', _userName));
     }
-    if (bikeModel != null) _bikeModel = bikeModel;
-    if (contact != null) _emergencyContact = contact;
-    if (message != null) _emergencyMessage = message;
+    if (bikeModel != null) {
+      _bikeModel = bikeModel;
+      _savePreference(
+          (preferences) => preferences.setString('profile.bikeModel', _bikeModel));
+    }
+    if (contact != null && contact.trim().isNotEmpty) {
+      _emergencyContacts = [
+        SosContact(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          name: 'Contacto SOS',
+          phone: contact.trim(),
+        ),
+      ];
+      _saveContacts();
+    }
+    if (message != null) {
+      _emergencyMessage = message;
+      _savePreference((preferences) => preferences.setString('sos.message', message));
+    }
     notifyListeners();
+  }
+
+  void addEmergencyContact(SosContact contact) {
+    _emergencyContacts = [..._emergencyContacts, contact];
+    _saveContacts();
+    notifyListeners();
+  }
+
+  void removeEmergencyContact(String id) {
+    _emergencyContacts =
+        _emergencyContacts.where((contact) => contact.id != id).toList();
+    _saveContacts();
+    notifyListeners();
+  }
+
+  void _saveContacts() {
+    final contactsJson = jsonEncode(
+      _emergencyContacts.map((contact) => contact.toJson()).toList(),
+    );
+    _savePreference(
+        (preferences) => preferences.setString('sos.contacts', contactsJson));
   }
 
   // --- FLUJO DE EMERGENCIA SOS ---

@@ -35,5 +35,6 @@ La app inicia con un registro local de tres pasos (teléfono, código de demostr
 
 **Prototipo solamente:** el código de registro no se envía por SMS ni se valida con un servicio; solo sirve para avanzar el flujo de demostración. La comunidad no se conecta a otros usuarios. El cliente FCM de alertas SOS requiere un proyecto Firebase y las Cloud Functions documentadas antes de poder enviar notificaciones remotas. No usar como sistema de emergencia real. El nivel de volumen también depende del dispositivo.
 Las métricas, recorridos recientes y rutas de Inicio son datos de ejemplo; la app todavía no registra trayectos ni permite guardar rutas reales.
+El mapa consulta el pronóstico horario de Open-Meteo para la ubicación GPS verificada y avisa sobre tormentas o ráfagas de viento de 40 km/h o más durante las próximas tres horas. No requiere una clave API. Como todavía no hay rutas activas con coordenadas, el widget describe el clima en la posición actual y no el riesgo de todo el recorrido.
 
 Consulta [FIREBASE_PUSH_SETUP.md](./FIREBASE_PUSH_SETUP.md) para configuración, privacidad y contrato del backend requerido para recibir alertas SOS en segundo plano.

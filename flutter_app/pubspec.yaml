@@ -32,6 +32,7 @@ dependencies:
 
   # Persistencia de preferencias
   shared_preferences: ^2.3.5
+  http: ^1.6.0
 
   # Iconografía y diseño
   cupertino_icons: ^1.0.8

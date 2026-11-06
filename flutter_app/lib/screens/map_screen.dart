@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/cyclist.dart';
 import '../models/map_layer.dart';
 import '../providers/app_state.dart';
+import '../widgets/weather_map_widget.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -213,6 +214,17 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ),
 
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 62,
+          left: 16,
+          right: 16,
+          child: WeatherMapWidget(
+            location: appState.hasVerifiedUserLocation
+                ? appState.userLocation
+                : null,
+          ),
+        ),
+
         // 3. BARRA LATERAL FLOTANTE DE ACCIONES
         Positioned(
           right: 16,
@@ -269,7 +281,7 @@ class _MapScreenState extends State<MapScreen> {
         // 4. ALERTA COMUNITARIA ENTRANTE (POPUP OVERLAY)
         if (appState.incomingEmergency != null) ...[
           Positioned(
-            top: 70,
+            top: MediaQuery.of(context).padding.top + 122,
             left: 16,
             right: 16,
             child: Container(

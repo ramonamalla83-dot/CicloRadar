@@ -77,7 +77,10 @@ class LocationService {
   }
 
   /// Inicia el flujo de actualizaciones continuas de posición
-  void startTracking(Function(LatLng) onLocationChanged) {
+  void startTracking(
+    void Function(LatLng position, double speedMetersPerSecond)
+        onLocationChanged,
+  ) {
     _positionStream?.cancel();
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -86,7 +89,10 @@ class LocationService {
       ),
     ).listen(
       (Position position) {
-        onLocationChanged(LatLng(position.latitude, position.longitude));
+        onLocationChanged(
+          LatLng(position.latitude, position.longitude),
+          position.speed,
+        );
       },
       onError: (_) {},
     );

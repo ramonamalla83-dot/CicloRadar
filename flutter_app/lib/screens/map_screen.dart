@@ -8,6 +8,7 @@ import '../models/cyclist.dart';
 import '../models/map_layer.dart';
 import '../models/safety_report.dart';
 import '../providers/app_state.dart';
+import '../services/eta_estimation_service.dart';
 import '../services/safety_report_service.dart';
 import '../widgets/advanced_night_mode_filter.dart';
 import '../widgets/weather_map_widget.dart';
@@ -23,6 +24,20 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   String? _lastCenteredEmergencyId;
   SafetyHazardType? _pendingSafetyReportType;
+  final EtaEstimationService _etaEstimationService = EtaEstimationService();
+  LatLng? _etaDestination;
+  EtaEstimate? _etaEstimate;
+  String? _etaError;
+  bool _isSelectingEtaDestination = false;
+  bool _isLoadingEta = false;
+  int _etaRequestId = 0;
+
+  @override
+  void dispose() {
+    _etaRequestId++;
+    _etaEstimationService.close();
+    super.dispose();
+  }
 
   void _recenterMap(LatLng target) {
     _mapController.move(target, 15.0);
@@ -56,6 +71,8 @@ class _MapScreenState extends State<MapScreen> {
             onTap: (_, point) {
               if (_pendingSafetyReportType != null) {
                 unawaited(_placeSafetyReport(point));
+              } else if (_isSelectingEtaDestination) {
+                unawaited(_selectEtaDestination(point));
               }
             },
           ),
@@ -87,6 +104,16 @@ class _MapScreenState extends State<MapScreen> {
                 }).toList(),
               ),
             ],
+            if (_etaDestination != null)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: [appState.userLocation, _etaDestination!],
+                    strokeWidth: 4,
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.9),
+                  ),
+                ],
+              ),
 
             // Marcadores de comunidad y usuario
             MarkerLayer(
@@ -198,6 +225,17 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   );
                 }),
+                if (_etaDestination != null)
+                  Marker(
+                    point: _etaDestination!,
+                    width: 48,
+                    height: 48,
+                    child: const Icon(
+                      Icons.flag_circle,
+                      color: Color(0xFF38BDF8),
+                      size: 42,
+                    ),
+                  ),
               ],
             ),
           ],
@@ -294,6 +332,28 @@ class _MapScreenState extends State<MapScreen> {
           bottom: 100,
           child: Column(
             children: [
+              AdvancedNightModeFilter(
+                enabled: appState.advancedNightModeEnabled,
+                child: FloatingActionButton.extended(
+                  heroTag: 'fab_eta',
+                  onPressed: _isLoadingEta
+                      ? null
+                      : _isSelectingEtaDestination
+                          ? _cancelEtaSelection
+                          : _beginEtaSelection,
+                  backgroundColor: _isSelectingEtaDestination
+                      ? const Color(0xFF0284C7)
+                      : const Color(0xFF18181B),
+                  foregroundColor: Colors.white,
+                  icon: Icon(
+                    _isSelectingEtaDestination
+                        ? Icons.close
+                        : Icons.schedule_outlined,
+                  ),
+                  label: Text(_isSelectingEtaDestination ? 'Cancelar' : 'ETA'),
+                ),
+              ),
+              const SizedBox(height: 10),
               // Botón Mapa de Calor (Toggle)
               AdvancedNightModeFilter(
                 enabled: appState.advancedNightModeEnabled,
@@ -434,6 +494,33 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ),
 
+        if (_isSelectingEtaDestination)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 122,
+            left: 16,
+            right: 16,
+            child: _EtaMapNotice(
+              icon: Icons.flag_outlined,
+              message: 'Toca el mapa para elegir tu destino.',
+              onClose: _cancelEtaSelection,
+            ),
+          ),
+
+        if (_etaEstimate != null || _isLoadingEta || _etaError != null)
+          Positioned(
+            left: 16,
+            right: 78,
+            bottom: 220,
+            child: _EtaResultCard(
+              estimate: _etaEstimate,
+              isLoading: _isLoadingEta,
+              error: _etaError,
+              hasHistoricalSpeed: appState.hasHistoricalSpeedData,
+              speedStatus: appState.historicalSpeedStatus,
+              onClose: _clearEta,
+            ),
+          ),
+
         // 4. ALERTA COMUNITARIA ENTRANTE (POPUP OVERLAY)
         if (appState.incomingEmergency != null) ...[
           Positioned(
@@ -490,6 +577,83 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ],
     );
+  }
+
+  void _beginEtaSelection() {
+    final appState = context.read<AppState>();
+    if (!appState.hasVerifiedUserLocation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Activa el GPS y espera a que se confirme tu ubicación para estimar la llegada.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _etaRequestId++;
+      _pendingSafetyReportType = null;
+      _etaDestination = null;
+      _etaEstimate = null;
+      _etaError = null;
+      _isSelectingEtaDestination = true;
+    });
+  }
+
+  void _cancelEtaSelection() {
+    setState(() {
+      _etaRequestId++;
+      _isSelectingEtaDestination = false;
+    });
+  }
+
+  Future<void> _selectEtaDestination(LatLng destination) async {
+    final appState = context.read<AppState>();
+    final requestId = ++_etaRequestId;
+    setState(() {
+      _isSelectingEtaDestination = false;
+      _etaDestination = destination;
+      _etaEstimate = null;
+      _etaError = null;
+      _isLoadingEta = true;
+    });
+
+    try {
+      final estimate = await _etaEstimationService.estimate(
+        origin: appState.userLocation,
+        destination: destination,
+        averageSpeedKmh: appState.historicalAverageSpeedKmh,
+      );
+      if (!mounted || requestId != _etaRequestId) return;
+      setState(() {
+        _etaEstimate = estimate;
+        _isLoadingEta = false;
+      });
+    } on EtaEstimationException catch (error) {
+      if (!mounted || requestId != _etaRequestId) return;
+      setState(() {
+        _etaError = error.message;
+        _isLoadingEta = false;
+      });
+    } on FormatException catch (error) {
+      if (!mounted || requestId != _etaRequestId) return;
+      setState(() {
+        _etaError = error.message;
+        _isLoadingEta = false;
+      });
+    }
+  }
+
+  void _clearEta() {
+    setState(() {
+      _etaRequestId++;
+      _etaDestination = null;
+      _etaEstimate = null;
+      _etaError = null;
+      _isLoadingEta = false;
+    });
   }
 
   Future<void> _beginSafetyReport() async {
@@ -549,7 +713,15 @@ class _MapScreenState extends State<MapScreen> {
     );
 
     if (!mounted || type == null) return;
-    setState(() => _pendingSafetyReportType = type);
+    setState(() {
+      _etaRequestId++;
+      _isSelectingEtaDestination = false;
+      _isLoadingEta = false;
+      _etaDestination = null;
+      _etaEstimate = null;
+      _etaError = null;
+      _pendingSafetyReportType = type;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Toca el punto exacto en el mapa.')),
     );
@@ -786,6 +958,181 @@ class PositionSafeArea extends StatelessWidget {
       left: 0,
       right: 0,
       child: child,
+    );
+  }
+}
+
+class _EtaMapNotice extends StatelessWidget {
+  const _EtaMapNotice({
+    required this.icon,
+    required this.message,
+    required this.onClose,
+  });
+
+  final IconData icon;
+  final String message;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xF209090B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF38BDF8)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF38BDF8)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Cancelar selección',
+            onPressed: onClose,
+            icon: const Icon(Icons.close, color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EtaResultCard extends StatelessWidget {
+  const _EtaResultCard({
+    required this.estimate,
+    required this.isLoading,
+    required this.error,
+    required this.hasHistoricalSpeed,
+    required this.speedStatus,
+    required this.onClose,
+  });
+
+  final EtaEstimate? estimate;
+  final bool isLoading;
+  final String? error;
+  final bool hasHistoricalSpeed;
+  final String? speedStatus;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = estimate;
+    final minutes = result?.duration.inMinutes ?? 0;
+    final etaLabel = minutes >= 60
+        ? '${minutes ~/ 60} h ${minutes % 60} min'
+        : '$minutes min';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xF209090B),
+        borderRadius: BorderRadius.circular(16),
+        border:
+            Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.7)),
+        boxShadow: const [
+          BoxShadow(color: Colors.black54, blurRadius: 12),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.schedule, color: Color(0xFF38BDF8), size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Tiempo estimado',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                padding: EdgeInsets.zero,
+                tooltip: 'Quitar destino',
+                onPressed: onClose,
+                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+              ),
+            ],
+          ),
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF38BDF8),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Consultando el perfil del terreno…',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (error != null)
+            Text(
+              error!,
+              style: const TextStyle(color: Colors.amber, fontSize: 12),
+            )
+          else if (result != null) ...[
+            Text(
+              etaLabel,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${result.distanceKm.toStringAsFixed(1)} km en línea recta · '
+              '↑ ${result.ascentMeters.round()} m · '
+              '${result.averageSpeedKmh.toStringAsFixed(1)} km/h',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              hasHistoricalSpeed
+                  ? 'Basado en tu promedio de velocidad GPS.'
+                  : 'Velocidad de referencia: aún no hay historial GPS.',
+              style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10),
+            ),
+            if (speedStatus != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  speedStatus!,
+                  style: const TextStyle(color: Colors.amber, fontSize: 10),
+                ),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              'Línea directa, no sigue calles ni senderos. '
+              'Altimetría: Open-Meteo / Copernicus DEM.',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/alarm_preset.dart';
@@ -48,6 +49,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool _trackingEnabled = true; // false = Modo Sigilo / Invisible
   bool _sosAlertNotificationsEnabled = false;
   bool _hasVerifiedUserLocation = false;
+  double _historicalSpeedSampleSumKmh = 0;
+  int _historicalSpeedSampleCount = 0;
+  int _persistedHistoricalSpeedSampleCount = 0;
+  Future<void>? _historicalSpeedWrite;
+  String? _historicalSpeedStatus;
+  bool _isDisposed = false;
   String? _sosPushStatus;
   String? _activeSosId;
   Timer? _presenceTimer;
@@ -104,6 +111,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   LatLng get userLocation => _userLocation;
   bool get isLoadingLocation => _isLoadingLocation;
   bool get hasVerifiedUserLocation => _hasVerifiedUserLocation;
+  static const double referenceCyclingSpeedKmh = 16.7;
+  double get historicalAverageSpeedKmh => _historicalSpeedSampleCount == 0
+      ? referenceCyclingSpeedKmh
+      : _historicalSpeedSampleSumKmh / _historicalSpeedSampleCount;
+  bool get hasHistoricalSpeedData => _historicalSpeedSampleCount > 0;
+  String? get historicalSpeedStatus => _historicalSpeedStatus;
   MapLayerType get activeLayer => _activeLayer;
   MapLayerType get preferredMapLayer => _preferredMapLayer;
   bool get automaticNightModeEnabled => _automaticNightModeEnabled;
@@ -151,6 +164,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _initApp() async {
     final preferences = await SharedPreferences.getInstance();
     _loadPreferences(preferences);
+    _loadHistoricalSpeed(preferences);
     _isReady = true;
     notifyListeners();
 
@@ -175,9 +189,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
 
     // Iniciar rastreo continuo
-    _locationService.startTracking((newPos) {
+    _locationService.startTracking((newPos, speedMetersPerSecond) {
       _userLocation = newPos;
       _hasVerifiedUserLocation = true;
+      _recordHistoricalSpeed(speedMetersPerSecond);
       if (_sosAlertNotificationsEnabled &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         unawaited(_publishSosPresence());
@@ -186,6 +201,99 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     });
     if (_sosAlertNotificationsEnabled && _sosPushService.isInitialized) {
       _startPresenceUpdates();
+    }
+  }
+
+  void _loadHistoricalSpeed(SharedPreferences preferences) {
+    final storedHistory = preferences.getString('activity.speedHistory');
+    if (storedHistory == null) return;
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(storedHistory);
+    } on FormatException {
+      _historicalSpeedStatus =
+          'El historial de velocidad guardado no es válido y se ignoró.';
+      return;
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded['sumKmh'] is! num ||
+        decoded['sampleCount'] is! int) {
+      _historicalSpeedStatus =
+          'El historial de velocidad guardado no es válido y se ignoró.';
+      return;
+    }
+    final sum = (decoded['sumKmh'] as num).toDouble();
+    final count = decoded['sampleCount'] as int;
+    if (!sum.isFinite ||
+        count < 0 ||
+        (count == 0 && sum != 0) ||
+        (count > 0 && (sum < count * 4 || sum > count * 50))) {
+      _historicalSpeedStatus =
+          'El historial de velocidad guardado no es válido y se ignoró.';
+      return;
+    }
+    _historicalSpeedSampleSumKmh = sum;
+    _historicalSpeedSampleCount = count;
+    _persistedHistoricalSpeedSampleCount = count;
+  }
+
+  void _recordHistoricalSpeed(double speedMetersPerSecond) {
+    final speedKmh = speedMetersPerSecond * 3.6;
+    if (!speedKmh.isFinite || speedKmh < 4 || speedKmh > 50) return;
+
+    _historicalSpeedSampleSumKmh += speedKmh;
+    _historicalSpeedSampleCount++;
+    if (_historicalSpeedSampleCount - _persistedHistoricalSpeedSampleCount >=
+        10) {
+      unawaited(_persistHistoricalSpeed());
+    }
+  }
+
+  Future<void> _persistHistoricalSpeed() async {
+    if (_historicalSpeedWrite != null) {
+      await _historicalSpeedWrite;
+      if (_persistedHistoricalSpeedSampleCount < _historicalSpeedSampleCount) {
+        await _persistHistoricalSpeed();
+      }
+      return;
+    }
+    final write = _writeHistoricalSpeedSnapshot();
+    _historicalSpeedWrite = write;
+    try {
+      await write;
+    } finally {
+      _historicalSpeedWrite = null;
+    }
+  }
+
+  Future<void> _writeHistoricalSpeedSnapshot() async {
+    final sampleCount = _historicalSpeedSampleCount;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final saved = await preferences.setString(
+        'activity.speedHistory',
+        jsonEncode({
+          'sumKmh': _historicalSpeedSampleSumKmh,
+          'sampleCount': sampleCount,
+        }),
+      );
+      if (!saved) {
+        _historicalSpeedStatus =
+            'No se pudo guardar el promedio de velocidad GPS.';
+        if (!_isDisposed) notifyListeners();
+        return;
+      }
+      _persistedHistoricalSpeedSampleCount = sampleCount;
+      _historicalSpeedStatus = null;
+    } on PlatformException catch (error) {
+      _historicalSpeedStatus =
+          'No se pudo guardar el promedio de velocidad GPS (${error.code}).';
+      if (!_isDisposed) notifyListeners();
+    } on MissingPluginException {
+      _historicalSpeedStatus =
+          'El almacenamiento local de velocidad no está disponible.';
+      if (!_isDisposed) notifyListeners();
     }
   }
 
@@ -847,6 +955,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _isDisposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
     _nightModeTimer?.cancel();
@@ -854,6 +963,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_safetyReportsSubscription?.cancel());
     _presenceTimer?.cancel();
     _locationService.stopTracking();
+    if (_historicalSpeedSampleCount > _persistedHistoricalSpeedSampleCount) {
+      unawaited(_persistHistoricalSpeed());
+    }
     _audioService.dispose();
     unawaited(_sosPushService.dispose());
     super.dispose();

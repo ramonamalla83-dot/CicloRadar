@@ -17,6 +17,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
+  String? _lastCenteredEmergencyId;
 
   void _recenterMap(LatLng target) {
     _mapController.move(target, 15.0);
@@ -26,6 +27,17 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final activeConfig = MapLayerConfig.getByType(appState.activeLayer);
+    final incomingEmergency = appState.incomingEmergency;
+    if (incomingEmergency != null &&
+        incomingEmergency.id != _lastCenteredEmergencyId) {
+      _lastCenteredEmergencyId = incomingEmergency.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            appState.incomingEmergency?.id == incomingEmergency.id) {
+          _recenterMap(incomingEmergency.position);
+        }
+      });
+    }
 
     return Stack(
       children: [

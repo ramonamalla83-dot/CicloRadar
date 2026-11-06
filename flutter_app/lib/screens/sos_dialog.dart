@@ -34,7 +34,8 @@ class SosDialog extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF18181B), // zinc-900
         borderRadius: BorderRadius.circular(24.0),
-        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4), width: 2),
+        border: Border.all(
+            color: Colors.redAccent.withValues(alpha: 0.4), width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.red.withValues(alpha: 0.25),
@@ -55,7 +56,8 @@ class SosDialog extends StatelessWidget {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                Icon(Icons.warning_amber_rounded,
+                    color: Colors.redAccent, size: 20),
                 SizedBox(width: 8),
                 Text(
                   'CONFIRMACIÓN SOS',
@@ -80,7 +82,8 @@ class SosDialog extends StatelessWidget {
                   value: appState.countdownSeconds / 5.0,
                   strokeWidth: 8,
                   backgroundColor: Colors.white12,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(Colors.redAccent),
                 ),
               ),
               Text(
@@ -105,7 +108,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Al terminar la cuenta regresiva se activará la alarma local. El envío remoto requiere Firebase configurado.',
+            'Al terminar se activará la alarma local y se solicitará un SOS grupal a tus contactos elegibles. El push requiere Firebase y backend configurados.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -175,7 +178,7 @@ class SosDialog extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'ALARMA LOCAL ACTIVA',
+            'ALARMA SOS ACTIVA',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 22,

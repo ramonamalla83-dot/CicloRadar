@@ -18,6 +18,18 @@ class SosPushException implements Exception {
   String toString() => message;
 }
 
+class SosActivationResult {
+  const SosActivationResult({
+    required this.sosId,
+    required this.groupNotifiedCount,
+    required this.groupSkippedCount,
+  });
+
+  final String sosId;
+  final int groupNotifiedCount;
+  final int groupSkippedCount;
+}
+
 class SosPushService {
   FirebaseMessaging? _messaging;
   FirebaseFunctions? _functions;
@@ -171,24 +183,36 @@ class SosPushService {
     }
   }
 
-  Future<String> activateSos({
+  Future<SosActivationResult> activateSos({
     required String riderName,
     required double latitude,
     required double longitude,
+    required List<String> recipientPhones,
   }) async {
     try {
       final result = await _call('activateSos', {
         'riderName': riderName,
         'latitude': latitude,
         'longitude': longitude,
+        'recipientPhones': recipientPhones,
       });
       final data = result.data;
-      if (data is! Map || data['sosId'] is! String) {
+      if (data is! Map ||
+          data['sosId'] is! String ||
+          (data['sosId'] as String).isEmpty ||
+          data['groupNotifiedCount'] is! int ||
+          data['groupSkippedCount'] is! int ||
+          (data['groupNotifiedCount'] as int) < 0 ||
+          (data['groupSkippedCount'] as int) < 0) {
         throw const SosPushException(
-          'El backend respondió sin un identificador SOS válido.',
+          'El backend respondió sin un resumen válido del SOS grupal.',
         );
       }
-      return data['sosId'] as String;
+      return SosActivationResult(
+        sosId: data['sosId'] as String,
+        groupNotifiedCount: data['groupNotifiedCount'] as int,
+        groupSkippedCount: data['groupSkippedCount'] as int,
+      );
     } on FirebaseFunctionsException catch (error) {
       throw _functionsError(error);
     }

@@ -275,12 +275,12 @@ class ProfileScreen extends StatelessWidget {
                       color: Color(0xFFF97316),
                     ),
                     title: const Text(
-                      'Notificaciones SOS en este dispositivo y cercanas',
+                      'Recibir alertas SOS grupales y cercanas',
                       style: TextStyle(color: Colors.white, fontSize: 14),
                     ),
                     subtitle: Text(
                       appState.sosPushConfigured
-                          ? 'Activa las notificaciones y comparte GPS solo mientras usas la app para avisos a 10 km.'
+                          ? 'Consentimiento para recibir SOS grupales y cercanos. Tu GPS verificado se comparte solo mientras usas la app.'
                           : 'Pendiente de configurar Firebase y el servicio de notificaciones.',
                       style:
                           TextStyle(color: Colors.grey.shade400, fontSize: 12),

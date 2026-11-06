@@ -57,7 +57,7 @@ class _SosContactsScreenState extends State<SosContactsScreen> {
               border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
             ),
             child: const Text(
-              'Los contactos se guardan en este dispositivo. El SOS todavía no envía SMS ni comparte alertas: esta función es de configuración para pruebas.',
+              'El SOS grupal envía push solo a contactos con cuenta CicloRadar verificada y alertas SOS aceptadas. El teléfono debe incluir código de país (ej.: +54...). Firebase y el backend todavía deben configurarse; no se envían SMS.',
               style: TextStyle(color: Colors.amber, fontSize: 13),
             ),
           ),
@@ -74,8 +74,9 @@ class _SosContactsScreenState extends State<SosContactsScreen> {
                     prefixIcon: Icon(Icons.person_outline),
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) =>
-                      value == null || value.trim().isEmpty ? 'Ingresa un nombre.' : null,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Ingresa un nombre.'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -85,11 +86,13 @@ class _SosContactsScreenState extends State<SosContactsScreen> {
                   onFieldSubmitted: (_) => _addContact(),
                   decoration: const InputDecoration(
                     labelText: 'Teléfono',
+                    hintText: '+54 11 1234-5678',
                     prefixIcon: Icon(Icons.phone_outlined),
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) =>
-                      value == null || value.trim().isEmpty ? 'Ingresa un teléfono.' : null,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Ingresa un teléfono.'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -130,9 +133,11 @@ class _SosContactsScreenState extends State<SosContactsScreen> {
                 subtitle: Text(contact.phone),
                 trailing: IconButton(
                   tooltip: 'Eliminar contacto',
-                  onPressed: () =>
-                      context.read<AppState>().removeEmergencyContact(contact.id),
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () => context
+                      .read<AppState>()
+                      .removeEmergencyContact(contact.id),
+                  icon:
+                      const Icon(Icons.delete_outline, color: Colors.redAccent),
                 ),
               ),
             ),

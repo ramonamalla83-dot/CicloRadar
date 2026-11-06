@@ -346,7 +346,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     _sosAlertNotificationsEnabled = true;
-    _sosPushStatus = 'Recibirás alertas SOS de ciclistas cercanos.';
+    _sosPushStatus = 'Recibirás alertas SOS grupales y de ciclistas cercanos.';
     notifyListeners();
     _startPresenceUpdates();
   }
@@ -487,6 +487,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final sosId = data['sosId']?.toString();
     if (latitude == null ||
         longitude == null ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180 ||
         sosId == null ||
         sosId.isEmpty) {
       _sosPushStatus = 'Se recibió una alerta SOS con datos incompletos.';
@@ -657,15 +661,21 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _sendSosToBackend() async {
+    final recipientPhones = normalizeSosRecipientPhones(_emergencyContacts);
+    final invalidContactCount = _emergencyContacts
+        .where((contact) => contact.normalizedPhone == null)
+        .length;
+
     if (!_sosPushService.isConfigured) {
       _sosPushStatus =
-          'SOS local activo; Firebase no está configurado y no se envió un push.';
+          'SOS local activo; Firebase no está configurado y no se envió un push grupal. '
+          'La alerta remota requiere backend desplegado y contactos con cuenta verificada.';
       notifyListeners();
       return;
     }
     if (!_sosPushService.isInitialized) {
       _sosPushStatus = _sosPushStatus ??
-          'SOS local activo; Firebase no pudo inicializarse y no se envió un push.';
+          'SOS local activo; Firebase no pudo inicializarse y no se envió un push grupal.';
       notifyListeners();
       return;
     }
@@ -680,20 +690,30 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     try {
-      final sosId = await _sosPushService.activateSos(
+      final result = await _sosPushService.activateSos(
         riderName: _userName,
         latitude: position.latitude,
         longitude: position.longitude,
+        recipientPhones: recipientPhones,
       );
       if (!_isEmergencyActive) {
-        await _sosPushService.resolveSos(sosId);
+        await _sosPushService.resolveSos(result.sosId);
         _sosPushStatus = 'SOS remoto desactivado.';
         notifyListeners();
         return;
       }
-      _activeSosId = sosId;
-      _sosPushStatus =
-          'SOS registrado por el backend. La entrega depende de permisos y dispositivos receptores.';
+      _activeSosId = result.sosId;
+      final invalidContactsMessage = invalidContactCount > 0
+          ? ' $invalidContactCount contacto(s) omitido(s): verifica el teléfono con código de país.'
+          : '';
+      _sosPushStatus = result.groupNotifiedCount > 0
+          ? 'SOS grupal aceptado para ${result.groupNotifiedCount} dispositivo(s). '
+              'La entrega final depende de la conexión del destinatario.'
+              '${result.groupSkippedCount > 0 ? ' ${result.groupSkippedCount} contacto(s) sin cuenta verificada o sin consentimiento.' : ''}'
+              '$invalidContactsMessage'
+          : 'SOS remoto activo, pero ningún contacto grupal confirmó elegibilidad.'
+              '${result.groupSkippedCount > 0 ? ' ${result.groupSkippedCount} contacto(s) sin cuenta verificada o sin consentimiento.' : ''}'
+              '$invalidContactsMessage';
     } on SosPushException catch (error) {
       _sosPushStatus =
           'SOS local activo, pero no se pudo enviar la alerta remota: ${error.message}';

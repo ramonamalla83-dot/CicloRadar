@@ -1,0 +1,10 @@
+{
+  "name": "CicloRadar - Seguridad y Comunidad para Ciclistas",
+  "description": "Aplicación social y de seguridad para ciclistas con mapas en tiempo real, alarmas SOS del sistema y comunidad.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

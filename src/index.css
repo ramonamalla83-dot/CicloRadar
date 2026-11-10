@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tema Oscuro Avanzado para Rutas Nocturnas */
+:root {
+  color-scheme: dark;
+}
+
+/* Modo OLED Puro para Manillares Nocturnos (0% emisión en píxeles negros) */
+html.night-oled body,
+html.night-oled .bg-zinc-950 {
+  background-color: #000000 !important;
+}
+
+html.night-oled .bg-zinc-900 {
+  background-color: #0c0c0e !important;
+}
+
+/* Filtro de Confort Nocturno (Atenúa picos de luz azul para reducir fatiga visual) */
+html.night-comfort-filter {
+  filter: sepia(0.12) brightness(0.94);
+  transition: filter 0.5s ease-in-out;
+}

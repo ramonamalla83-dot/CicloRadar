@@ -15,9 +15,11 @@ import {
   Square,
   Sparkles,
   Zap,
-  Info
+  Info,
+  Mic
 } from 'lucide-react';
 import { audioEngine, ALARM_PRESETS } from '../utils/audio';
+import { useVoiceSos } from '../hooks/useVoiceSos';
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -50,6 +52,7 @@ export default function PermissionsModal({
   const [isPlayingTest, setIsPlayingTest] = useState(false);
   const [isGranting, setIsGranting] = useState(false);
   const [bgTestCountdown, setBgTestCountdown] = useState<number | null>(null);
+  const voiceSos = useVoiceSos();
 
   if (!isOpen) return null;
 
@@ -255,6 +258,34 @@ export default function PermissionsModal({
                     Permitir
                   </button>
                 )}
+              </div>
+
+              {/* 4. Micrófono para Comando de Voz 'CicloRadar SOS' */}
+              <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`p-2 rounded-lg ${voiceSos.isListening ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                    <Mic className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white">Comando de Voz ("CicloRadar SOS")</p>
+                    <p className="text-[11px] text-zinc-400 truncate">Detección de voz manos libres en primer plano</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {voiceSos.isListening ? (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-green-400 bg-green-500/10 px-2.5 py-1 rounded-full border border-green-500/20">
+                      <Check className="w-3 h-3 stroke-[3]" /> Activo
+                    </span>
+                  ) : (
+                    <button 
+                      onClick={() => voiceSos.startListening()}
+                      className="text-xs font-bold bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      Activar
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Banner de cuenta regresiva para prueba en 2do plano */}

@@ -27,7 +27,8 @@ import {
   Radio,
   Bell,
   Users,
-  Flag
+  Flag,
+  Mic
 } from 'lucide-react';
 import { generateHeatmapGeoJson, getCyclingCorridors } from '../utils/heatmapData';
 import { audioEngine, ALARM_PRESETS } from '../utils/audio';
@@ -1357,14 +1358,20 @@ export default function CyclingMap({
             CANCELAR SOS
           </button>
         ) : (
-          <button
-            className={`${sosStatus === 'countdown' ? 'hidden' : 'flex'} bg-red-600 hover:bg-red-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all hover:scale-105 items-center justify-center border border-red-500 w-14 h-14`}
-            onClick={handleSosClick}
-            title="Activar SOS de Emergencia"
-            aria-label="Activar SOS"
-          >
-            <AlertCircle className="w-8 h-8" />
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-950/90 border border-zinc-800 text-[11px] text-zinc-300 font-semibold shadow-lg backdrop-blur-md pointer-events-none">
+              <Mic className="w-3.5 h-3.5 text-red-400 animate-pulse" />
+              <span>O di <strong className="text-white font-mono">"CicloRadar SOS"</strong></span>
+            </div>
+            <button
+              className={`${sosStatus === 'countdown' ? 'hidden' : 'flex'} bg-red-600 hover:bg-red-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all hover:scale-105 items-center justify-center border border-red-500 w-14 h-14`}
+              onClick={handleSosClick}
+              title="Activar SOS de Emergencia (O di 'CicloRadar SOS')"
+              aria-label="Activar SOS"
+            >
+              <AlertCircle className="w-8 h-8" />
+            </button>
+          </div>
         )}
       </div>
 

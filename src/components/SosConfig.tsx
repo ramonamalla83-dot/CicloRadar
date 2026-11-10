@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Phone, User as UserIcon } from 'lucide-react';
+import { Plus, Trash2, Phone, User as UserIcon, Mic, Sparkles } from 'lucide-react';
+import { useVoiceSos } from '../hooks/useVoiceSos';
 
 export default function SosConfig() {
   const [contacts, setContacts] = useState([
@@ -113,6 +114,140 @@ export default function SosConfig() {
           </div>
         )}
       </div>
+
+      {/* SECCIÓN COMANDO DE VOZ MANOS LIBRES ('CicloRadar SOS') */}
+      <VoiceSosSection />
+    </div>
+  );
+}
+
+function VoiceSosSection() {
+  const { 
+    isSupported, 
+    isEnabled, 
+    isListening, 
+    hasPermission, 
+    lastPhrase, 
+    toggleEnabled, 
+    startListening, 
+    simulateVoiceCommand 
+  } = useVoiceSos();
+
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
+
+  const handleTestVoiceCommand = () => {
+    simulateVoiceCommand('CicloRadar SOS');
+    setTestFeedback('✅ Comando de voz "CicloRadar SOS" simulado con éxito.');
+    setTimeout(() => setTestFeedback(null), 4000);
+  };
+
+  return (
+    <div className="mt-6 bg-zinc-900 p-4 rounded-2xl border border-zinc-800 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className={`p-2 rounded-xl ${
+            isEnabled && isListening 
+              ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+              : 'bg-zinc-800 text-zinc-400'
+          }`}>
+            <Mic className={`w-5 h-5 ${isEnabled && isListening ? 'animate-pulse text-red-400' : ''}`} />
+          </div>
+          <div>
+            <h3 className="font-bold text-white text-sm flex items-center gap-2">
+              <span>Comando de Voz 'CicloRadar SOS'</span>
+              {isEnabled && isListening && (
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              )}
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Activa la alarma de emergencia con las manos en el manillar
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            if (!isSupported) {
+              alert('El reconocimiento de voz no está soportado en este navegador.');
+              return;
+            }
+            toggleEnabled();
+          }}
+          className={`h-9 px-3.5 rounded-xl font-bold text-xs transition-colors border ${
+            !isSupported
+              ? 'opacity-40 border-zinc-700 bg-zinc-800 text-zinc-500 cursor-not-allowed'
+              : isEnabled
+              ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/40'
+              : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400 border-zinc-700'
+          }`}
+        >
+          {isEnabled ? 'Activado' : 'Desactivado'}
+        </button>
+      </div>
+
+      <div className="p-3 bg-zinc-950/70 rounded-xl border border-zinc-800/80 space-y-2 text-xs">
+        <div className="flex items-center justify-between text-zinc-300">
+          <span className="text-zinc-400">Estado del Reconocimiento:</span>
+          <span className={`font-semibold ${
+            !isSupported
+              ? 'text-zinc-500'
+              : isEnabled && isListening
+              ? 'text-emerald-400 flex items-center gap-1.5'
+              : isEnabled
+              ? 'text-yellow-400'
+              : 'text-zinc-400'
+          }`}>
+            {!isSupported
+              ? 'No soportado en este navegador'
+              : isEnabled && isListening
+              ? '● Escuchando en primer plano'
+              : isEnabled
+              ? 'En pausa (esperando app activa)'
+              : 'Desactivado'}
+          </span>
+        </div>
+
+        {lastPhrase && (
+          <div className="flex items-center justify-between text-zinc-400 pt-1 border-t border-zinc-900">
+            <span>Última frase escuchada:</span>
+            <span className="font-mono text-zinc-200 truncate max-w-[200px]">"{lastPhrase}"</span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-zinc-400 pt-1 border-t border-zinc-900">
+          <span>Frase clave oficial:</span>
+          <span className="font-bold text-orange-400 font-mono">"CicloRadar SOS"</span>
+        </div>
+      </div>
+
+      <p className="text-xs text-zinc-400 leading-relaxed">
+        💡 <strong>Uso recomendado:</strong> Si sufres una caída, agresión o pérdida de control y no puedes pulsar la pantalla táctil, di en voz alta <strong>"CicloRadar SOS"</strong>. La aplicación emitirá un tono acústico inmediato y abrirá una cuenta regresiva de 5 segundos con sirena automática de máxima potencia.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <button
+          onClick={handleTestVoiceCommand}
+          className="h-9 px-3.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 text-xs font-bold transition-colors flex items-center gap-1.5"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Probar Activación 'CicloRadar SOS'</span>
+        </button>
+
+        {isEnabled && !isListening && isSupported && (
+          <button
+            onClick={() => startListening()}
+            className="h-9 px-3.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 text-xs font-semibold transition-colors"
+          >
+            Activar Micrófono Ahora
+          </button>
+        )}
+      </div>
+
+      {testFeedback && (
+        <div className="p-2.5 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 animate-in fade-in">
+          {testFeedback}
+        </div>
+      )}
     </div>
   );
 }

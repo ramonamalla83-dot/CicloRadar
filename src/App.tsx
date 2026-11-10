@@ -2,20 +2,25 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import CyclingMap from './components/Map';
 import Auth from './components/Auth';
 import HomeMenu from './components/HomeMenu';
 import Community from './components/Community';
 import SosConfig from './components/SosConfig';
 import ProfileSettings from './components/ProfileSettings';
-import { ArrowLeft, Home, Bike, ShieldAlert, MapPin, Check, Users, User, Map as MapIcon, LogOut, ShieldCheck, Volume2, Smartphone, HelpCircle, Sun, Moon } from 'lucide-react';
+import { 
+  ArrowLeft, Home, Bike, ShieldAlert, MapPin, Check, Users, User, 
+  Map as MapIcon, LogOut, ShieldCheck, Volume2, Smartphone, 
+  HelpCircle, Sun, Moon, Mic, MicOff, X, Sparkles, AlertOctagon 
+} from 'lucide-react';
 import { audioEngine, ALARM_PRESETS } from './utils/audio';
 import { useAppPermissions } from './hooks/useAppPermissions';
 import PermissionsModal from './components/PermissionsModal';
 import { notificationService } from './utils/notifications';
 import Tutorial, { TUTORIAL_STORAGE_KEY } from './components/Tutorial';
 import { useCyclingTheme } from './hooks/useCyclingTheme';
+import { useVoiceSos } from './hooks/useVoiceSos';
 
 type Screen = 'auth' | 'home' | 'map' | 'community' | 'sos' | 'profile';
 
@@ -35,8 +40,62 @@ export default function App() {
   const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
+  // Estados para comando de voz 'CicloRadar SOS'
+  const [voiceSosCountdown, setVoiceSosCountdown] = useState<number | null>(null);
+  const [voiceSosPhrase, setVoiceSosPhrase] = useState<string>('CicloRadar SOS');
+  const [activeLocalSos, setActiveLocalSos] = useState<boolean>(false);
+  const voiceCountdownInterval = useRef<any>(null);
+
   const permissions = useAppPermissions();
   const theme = useCyclingTheme();
+
+  const handleVoiceSosTrigger = (detectedPhrase: string) => {
+    // Si ya hay alarma activa o cuenta regresiva, evitar solapamiento
+    if (voiceSosCountdown !== null || activeLocalSos) return;
+
+    setVoiceSosPhrase(detectedPhrase || 'CicloRadar SOS');
+    setVoiceSosCountdown(5);
+
+    if (voiceCountdownInterval.current) clearInterval(voiceCountdownInterval.current);
+    voiceCountdownInterval.current = setInterval(() => {
+      setVoiceSosCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(voiceCountdownInterval.current);
+          voiceCountdownInterval.current = null;
+          setVoiceSosCountdown(null);
+          setActiveLocalSos(true);
+          audioEngine.play(alarmSound);
+          setCurrentScreen('map');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleCancelVoiceSos = () => {
+    if (voiceCountdownInterval.current) {
+      clearInterval(voiceCountdownInterval.current);
+      voiceCountdownInterval.current = null;
+    }
+    setVoiceSosCountdown(null);
+    audioEngine.stop();
+  };
+
+  const handleStopLocalSos = () => {
+    setActiveLocalSos(false);
+    audioEngine.stop();
+  };
+
+  const voiceSos = useVoiceSos(handleVoiceSosTrigger);
+
+  // Iniciar reconocimiento de voz automáticamente cuando el ciclista inicia sesión
+  useEffect(() => {
+    if (user && voiceSos.isEnabled && !voiceSos.isListening) {
+      voiceSos.startListening();
+    }
+  }, [user, voiceSos.isEnabled]);
 
   useEffect(() => {
     if (incomingSos) {
@@ -203,6 +262,41 @@ export default function App() {
               </span>
             </button>
 
+            {/* Indicador y control de Comando de Voz 'CicloRadar SOS' */}
+            <button
+              onClick={() => {
+                if (!voiceSos.isSupported) {
+                  alert('El reconocimiento de voz Web Speech API no está soportado en este navegador.');
+                  return;
+                }
+                voiceSos.toggleEnabled();
+              }}
+              className={`h-9 px-2.5 rounded-full flex items-center gap-1.5 text-xs font-bold border transition-colors shadow-sm ${
+                !voiceSos.isSupported
+                  ? 'opacity-40 border-zinc-800 bg-zinc-900 text-zinc-500 cursor-not-allowed'
+                  : voiceSos.isEnabled && voiceSos.isListening
+                  ? 'bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25'
+                  : voiceSos.isEnabled
+                  ? 'bg-orange-500/15 border-orange-500/30 text-orange-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+              }`}
+              title={
+                !voiceSos.isSupported
+                  ? 'Comando de voz no soportado'
+                  : voiceSos.isEnabled
+                  ? "Comando de voz activo: Di 'CicloRadar SOS' para activar emergencia"
+                  : 'Comando de voz desactivado. Toca para activar'
+              }
+            >
+              <Mic className={`w-3.5 h-3.5 ${voiceSos.isEnabled && voiceSos.isListening ? 'animate-pulse text-red-400' : ''}`} />
+              <span className="hidden lg:inline text-[11px]">
+                {voiceSos.isEnabled && voiceSos.isListening ? 'Voz SOS' : voiceSos.isEnabled ? 'Voz On' : 'Voz Off'}
+              </span>
+              {voiceSos.isEnabled && voiceSos.isListening && (
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
+              )}
+            </button>
+
             {user && (
               <button 
                 onClick={() => setCurrentScreen('profile')}
@@ -354,6 +448,74 @@ export default function App() {
         isOpen={isTutorialOpen} 
         onClose={() => setIsTutorialOpen(false)} 
       />
+
+      {/* MODAL DE CUENTA REGRESIVA - COMANDO DE VOZ DETECTADO */}
+      {voiceSosCountdown !== null && (
+        <div className="fixed inset-0 z-50 bg-red-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-white animate-in zoom-in-95 duration-200">
+          <div className="w-24 h-24 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center mb-4 animate-bounce">
+            <Mic className="w-12 h-12 text-red-400" />
+          </div>
+
+          <div className="text-center space-y-3 mb-8 max-w-sm">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 border border-white/20 text-xs font-bold uppercase tracking-wider text-orange-400">
+              <Sparkles className="w-3.5 h-3.5 text-orange-400 animate-spin" />
+              <span>Comando de voz detectado</span>
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              "{voiceSosPhrase}"
+            </h2>
+
+            <p className="text-sm text-zinc-300 leading-relaxed">
+              Activando alarma acústica máxima y alerta de emergencia en:
+            </p>
+
+            <div className="text-7xl font-black text-white font-mono my-4 tracking-tighter drop-shadow-[0_0_25px_rgba(239,68,68,0.8)]">
+              {voiceSosCountdown}
+            </div>
+
+            <p className="text-xs text-red-200/80">
+              Toca el botón abajo para cancelar si fue una falsa alarma o prueba.
+            </p>
+          </div>
+
+          <button
+            onClick={handleCancelVoiceSos}
+            className="w-full max-w-xs py-4 px-6 rounded-2xl bg-white text-red-600 font-extrabold text-base shadow-2xl hover:bg-zinc-100 active:scale-95 transition-all flex items-center justify-center gap-2 border border-white"
+          >
+            <X className="w-5 h-5 stroke-[3]" /> Cancelar (Falsa Alarma)
+          </button>
+        </div>
+      )}
+
+      {/* BANNER HUD - ALERTA SOS LOCAL ACTIVA DISPARADA POR VOZ */}
+      {activeLocalSos && (
+        <div className="fixed top-20 left-4 right-4 z-40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 rounded-2xl shadow-2xl border-2 border-white/40 flex items-center justify-between gap-3 animate-in slide-in-from-top-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-white/25 flex items-center justify-center shrink-0 animate-pulse">
+              <ShieldAlert className="w-6 h-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="font-black text-sm uppercase tracking-wide truncate">¡ALERTA SOS ACTIVA!</h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/40 text-yellow-300 border border-yellow-300/30">
+                  Activada por Voz
+                </span>
+              </div>
+              <p className="text-xs text-red-100 truncate">
+                Sirena acústica de máxima potencia emitiéndose.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleStopLocalSos}
+            className="px-4 py-2.5 bg-white text-red-700 font-black rounded-xl text-xs hover:bg-zinc-100 active:scale-95 transition-all shadow-md shrink-0 flex items-center gap-1.5"
+          >
+            <X className="w-4 h-4" /> Detener Alarma
+          </button>
+        </div>
+      )}
     </div>
   );
 }

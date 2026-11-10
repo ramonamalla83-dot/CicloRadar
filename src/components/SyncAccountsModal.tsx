@@ -50,9 +50,9 @@ export default function SyncAccountsModal({
     }
   };
 
-  const handleConnectProvider = (provider: SyncProvider) => {
+  const handleConnectProvider = async (provider: SyncProvider) => {
     // 1. Intentar popup OAuth estándar
-    const opened = sync.startOAuthPopup(provider);
+    const opened = await sync.startOAuthPopup(provider);
     if (!opened) {
       // Fallback a conexión directa si el navegador bloquea ventanas emergentes
       sync.connectAccount(provider);

@@ -1,4 +1,4 @@
-import { useState, FormEvent, useMemo } from 'react';
+import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { 
   Bike, 
   Clock, 
@@ -217,6 +217,19 @@ export default function HomeMenu({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  // Auto-sincronización automática de cuentas conectadas al abrir Inicio
+  useEffect(() => {
+    if (sync.hasAnyConnected && !sync.isSyncing) {
+      const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
+      const needsSync = (['strava', 'garmin', 'igsport'] as SyncProvider[]).some(
+        p => sync.accounts[p].connected && sync.accounts[p].autoSync && (!sync.accounts[p].lastSyncAt || sync.accounts[p].lastSyncAt! < fifteenMinutesAgo)
+      );
+      if (needsSync) {
+        sync.syncAll();
+      }
+    }
+  }, [sync.hasAnyConnected, sync.isSyncing, sync.accounts, sync.syncAll]);
 
   // Convertir actividades sincronizadas a rutas unificadas
   const syncedRoutes: SavedRoute[] = useMemo(() => {

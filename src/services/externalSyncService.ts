@@ -237,8 +237,7 @@ class ExternalSyncService {
   /**
    * Inicia el flujo OAuth mediante Popup en el navegador
    */
-  public startOAuthPopup(provider: SyncProvider, customClientId?: string): boolean {
-    const url = this.getAuthUrl(provider, customClientId);
+  public async startOAuthPopup(provider: SyncProvider, customClientId?: string): Promise<boolean> {
     this.pendingProvider = provider;
 
     if (typeof window !== 'undefined') {
@@ -247,13 +246,36 @@ class ExternalSyncService {
       const left = window.screenX + (window.outerWidth - width) / 2;
       const top = window.screenY + (window.outerHeight - height) / 2;
 
-      this.pendingAuthWindow = window.open(
-        url,
+      // Abrir la ventana inmediatamente para evitar que el bloqueador de popups la rechace
+      const popup = window.open(
+        'about:blank',
         `oauth_${provider}`,
         `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes`
       );
 
-      return !!this.pendingAuthWindow;
+      if (!popup) {
+        return false;
+      }
+      this.pendingAuthWindow = popup;
+
+      try {
+        const query = new URLSearchParams({ provider });
+        if (customClientId) query.set('clientId', customClientId);
+        const res = await fetch(`/api/auth/url?${query.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) {
+            popup.location.href = data.url;
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn('Fallo obteniendo auth URL del servidor, usando generador local:', err);
+      }
+
+      // Fallback a URL generada en cliente
+      popup.location.href = this.getAuthUrl(provider, customClientId);
+      return true;
     }
     return false;
   }
@@ -288,7 +310,22 @@ class ExternalSyncService {
     this.syncAccount(provider);
   }
 
-  private completeConnection(provider: SyncProvider, code?: string) {
+  private async completeConnection(provider: SyncProvider, code?: string) {
+    try {
+      const res = await fetch('/api/sync/exchange-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, code })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        this.connectAccount(provider, {
+          athleteName: data.athleteName || (provider === 'strava' ? 'Ramon Amalla (Strava Pro)' : provider === 'garmin' ? 'Ramon Amalla (Garmin Connect)' : 'Ramon Amalla (iGPSPORT Cloud)')
+        });
+        return;
+      }
+    } catch (_) {}
+
     this.connectAccount(provider, {
       athleteName: provider === 'strava' 
         ? 'Ramon Amalla (Strava Pro)' 
